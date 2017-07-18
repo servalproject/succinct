@@ -1,0 +1,58 @@
+apply plugin: 'com.android.application'
+
+def load(String filename) {
+    def propFile = file(filename)
+    if (propFile.exists()) {
+        println "Loading properties from $propFile"
+        def props = new Properties();
+        props.load(new FileInputStream(propFile))
+        for (p in props) {
+            def value = p.value
+            if (value.startsWith("./"))
+                value = new File(propFile.getParent(), value.substring(2)).absolutePath
+            println "${p.key} = $value"
+            project.ext[p.key] = value
+        }
+    }
+}
+load("../private.properties")
+
+android {
+    compileSdkVersion 25
+    buildToolsVersion "25.0.2"
+    defaultConfig {
+        applicationId "org.servalproject.succinct"
+        minSdkVersion 18
+        targetSdkVersion 25
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
+        externalNativeBuild {
+            cmake {
+                cppFlags ""
+            }
+        }
+        buildConfigField "String", "rockAppId", "\"$rockAppId\""
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+    externalNativeBuild {
+        cmake {
+            path "CMakeLists.txt"
+        }
+    }
+}
+
+dependencies {
+    compile project(':connect-framework-127')
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+    androidTestCompile('com.android.support.test.espresso:espresso-core:2.2.2', {
+        exclude group: 'com.android.support', module: 'support-annotations'
+    })
+    compile 'com.android.support:appcompat-v7:25.3.1'
+    testCompile 'junit:junit:4.12'
+}
