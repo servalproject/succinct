@@ -20,12 +20,16 @@ load("../private.properties")
 android {
     compileSdkVersion 25
     buildToolsVersion "25.0.2"
+
+    ext.commitCount = "git rev-list --count HEAD".execute().text.toInteger();
+    ext.gitDescribe = "git describe --always --dirty --tags".execute().text.trim();
+
     defaultConfig {
         applicationId "org.servalproject.succinct"
         minSdkVersion 18
         targetSdkVersion 25
-        versionCode 1
-        versionName "1.0"
+        versionCode commitCount
+        versionName gitDescribe
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
