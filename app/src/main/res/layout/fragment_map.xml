@@ -4,9 +4,9 @@
     android:layout_height="match_parent"
     tools:context=".MapFragment">
 
-    <TextView
+    <org.mapsforge.map.android.view.MapView
+        android:id="@+id/map_view"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:text="Hello World (map)" />
+        android:layout_height="match_parent" />
 
 </FrameLayout>
