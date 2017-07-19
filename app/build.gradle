@@ -31,6 +31,7 @@ android {
         targetSdkVersion 25
         versionCode commitCount
         versionName gitDescribe
+        vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner "android.support.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
