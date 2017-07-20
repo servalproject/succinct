@@ -1,13 +1,9 @@
 package org.servalproject.succinct;
 
-import android.Manifest;
 import android.content.Context;
-import android.content.pm.PackageManager;
-import android.os.Build;
 import android.os.Bundle;
 import android.app.Fragment;
 import android.os.Environment;
-import android.support.v4.app.ActivityCompat;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -61,7 +57,7 @@ public class MapFragment extends Fragment {
 
         // tile renderer layer
         File mapFile = new File(Environment.getExternalStorageDirectory(), MAP_FILE);
-        if (mapFile.isFile() && isStoragePermissionGranted()) {
+        if (mapFile.isFile()) {
             MapDataStore mapDataStore = new MapFile(mapFile);
             TileRendererLayer tileRendererLayer = new TileRendererLayer(tileCache, mapDataStore,
                     map.getModel().mapViewPosition, AndroidGraphicFactory.INSTANCE);
@@ -88,17 +84,5 @@ public class MapFragment extends Fragment {
     @Override
     public void onDetach() {
         super.onDetach();
-    }
-
-    private boolean isStoragePermissionGranted() {
-        if (Build.VERSION.SDK_INT < 23) {
-            // permissions are granted automatically if present in manifest
-            return true;
-        }
-        if (getActivity().checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-            return true;
-        }
-        ActivityCompat.requestPermissions(getActivity(), new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
-        return false;
     }
 }
