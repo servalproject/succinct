@@ -43,17 +43,22 @@ public class MapFragment extends Fragment {
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
         View view = inflater.inflate(R.layout.fragment_map, container, false);
-        MapView map = (MapView) view.findViewById(R.id.map_view);
+        final MapView map = (MapView) view.findViewById(R.id.map_view);
         map.setClickable(true);
         map.getMapScaleBar().setVisible(true);
         map.setBuiltInZoomControls(true);
         map.setZoomLevelMin((byte) 10);
         map.setZoomLevelMax((byte) 20);
 
-        // create tile cache
-        TileCache tileCache = AndroidUtil.createTileCache(getActivity(), "mapcache",
-                map.getModel().displayModel.getTileSize(), 1f,
-                map.getModel().frameBufferModel.getOverdrawFactor());
+        MainActivity mainActivity = (MainActivity) getActivity();
+        TileCache tileCache = mainActivity.getMapTileCache(new MainActivity.Supplier<TileCache>() {
+            @Override
+            public TileCache get() {
+                return AndroidUtil.createTileCache(getActivity(), "mapcache",
+                        map.getModel().displayModel.getTileSize(), 1f,
+                        map.getModel().frameBufferModel.getOverdrawFactor(), true);
+            }
+        });
 
         // tile renderer layer
         File mapFile = new File(Environment.getExternalStorageDirectory(), MAP_FILE);

@@ -22,6 +22,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
+import org.mapsforge.map.layer.cache.TileCache;
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener {
@@ -39,6 +40,12 @@ public class MainActivity extends AppCompatActivity
         PERMITTED,
         DENIED,
         WAITING
+    }
+
+    // for fast switching between map and other fragments, keep the tile cache in parent activity
+    private static TileCache tileCache;
+    interface Supplier<T> {
+        public T get();
     }
 
     @Override
@@ -226,5 +233,12 @@ public class MainActivity extends AppCompatActivity
             Log.d(TAG, "onActivityResult checkAllPermissions");
             checkAllPermissions();
         }
+    }
+
+    protected TileCache getMapTileCache(MainActivity.Supplier<TileCache> creator) {
+        if (tileCache == null) {
+            tileCache = creator.get();
+        }
+        return tileCache;
     }
 }
