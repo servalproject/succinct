@@ -119,19 +119,40 @@ public class MainActivity extends AppCompatActivity
 
         // todo: check current view and ignore if already selected
         if (id == R.id.nav_team) {
+
+            TeamFragment team = new TeamFragment();
+            FragmentTransaction transaction = getFragmentManager().beginTransaction();
+            transaction.replace(R.id.main_frame, team);
+            // transaction.addToBackStack(null);
+            transaction.commit();
+
             toolbar.setTitle(R.string.nav_team);
         } else if (id == R.id.nav_map) {
 
             MapFragment map = new MapFragment();
             FragmentTransaction transaction = getFragmentManager().beginTransaction();
             transaction.replace(R.id.main_frame, map);
-            transaction.addToBackStack(null);
+            // transaction.addToBackStack(null);
             transaction.commit();
 
             toolbar.setTitle(R.string.nav_map);
         } else if (id == R.id.nav_chat) {
+
+            ChatFragment chat = new ChatFragment();
+            FragmentTransaction transaction = getFragmentManager().beginTransaction();
+            transaction.replace(R.id.main_frame, chat);
+            // transaction.addToBackStack(null);
+            transaction.commit();
+
             toolbar.setTitle(R.string.nav_chat);
         } else if (id == R.id.nav_settings) {
+
+            SettingsFragment settings = new SettingsFragment();
+            FragmentTransaction transaction = getFragmentManager().beginTransaction();
+            transaction.replace(R.id.main_frame, settings);
+            transaction.addToBackStack(null);
+            transaction.commit();
+
             toolbar.setTitle(R.string.nav_settings);
         }
 
