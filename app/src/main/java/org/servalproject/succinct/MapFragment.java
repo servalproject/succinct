@@ -65,7 +65,7 @@ public class MapFragment extends Fragment {
 
             map.getLayerManager().getLayers().add(tileRendererLayer);
             map.setCenter(new LatLong(-34.9285, 138.6007));
-            map.setZoomLevel((byte) 12);
+            map.setZoomLevel((byte) 16);
         }
         return view;
     }
