@@ -21,6 +21,8 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 
+import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
+
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener {
 
@@ -58,6 +60,15 @@ public class MainActivity extends AppCompatActivity
         Log.d(TAG, "onCreate checkAllPermissions");
         PermissionState state = checkAllPermissions();
         // todo handle state (should be either PERMITTED or WAITING)
+
+        // Initialise AndroidGraphicFactory (used by maps)
+        AndroidGraphicFactory.createInstance(getApplication());
+    }
+
+    @Override
+    protected void onDestroy() {
+        AndroidGraphicFactory.clearResourceMemoryCache();
+        super.onDestroy();
     }
 
     @Override

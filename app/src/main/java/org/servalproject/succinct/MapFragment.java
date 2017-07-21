@@ -71,12 +71,6 @@ public class MapFragment extends Fragment {
     }
 
     @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        AndroidGraphicFactory.clearResourceMemoryCache();
-    }
-
-    @Override
     public void onAttach(Context context) {
         super.onAttach(context);
     }

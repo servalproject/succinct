@@ -3,7 +3,6 @@ package org.servalproject.succinct;
 import android.app.Application;
 import android.os.Handler;
 
-import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
 import org.servalproject.succinct.messaging.rock.RockMessaging;
 
 public class App extends Application {
@@ -15,9 +14,6 @@ public class App extends Application {
 		super.onCreate();
 		UIHandler = new Handler(this.getMainLooper());
 		//rock = new RockMessaging(this, this.getSharedPreferences("",0));
-
-		// Initialise AndroidGraphicFactory (used by maps)
-		AndroidGraphicFactory.createInstance(this);
 	}
 
 	@Override
