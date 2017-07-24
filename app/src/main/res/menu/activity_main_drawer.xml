@@ -14,6 +14,10 @@
             android:id="@+id/nav_chat"
             android:icon="@drawable/ic_menu_chat"
             android:title="@string/nav_chat" />
+        <item
+            android:id="@+id/nav_rock"
+            android:icon="@drawable/ic_menu_chat"
+            android:title="@string/nav_rock" />
     </group>
 
     <group

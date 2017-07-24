@@ -1,6 +1,7 @@
 package org.servalproject.succinct;
 
 import android.Manifest;
+import android.app.Fragment;
 import android.app.FragmentTransaction;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -47,6 +48,8 @@ public class MainActivity extends AppCompatActivity
     interface Supplier<T> {
         public T get();
     }
+
+    private int selectedFragment=-1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -117,43 +120,41 @@ public class MainActivity extends AppCompatActivity
         int id = item.getItemId();
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
 
-        // todo: check current view and ignore if already selected
-        if (id == R.id.nav_team) {
+        if (id == selectedFragment)
+            return true;
 
-            TeamFragment team = new TeamFragment();
+        selectedFragment = id;
+
+        Fragment newFragment = null;
+        CharSequence newTitle = item.getTitle();
+        switch (id){
+            case R.id.nav_team:
+                newFragment = new TeamFragment();
+                break;
+
+            case R.id.nav_map:
+                newFragment = new MapFragment();
+                break;
+
+            case R.id.nav_chat:
+                newFragment = new ChatFragment();
+                break;
+
+            case R.id.nav_settings:
+                newFragment = new SettingsFragment();
+                break;
+
+            case R.id.nav_rock:
+                newFragment = new RockFragment();
+                break;
+        }
+
+        if (newFragment != null) {
             FragmentTransaction transaction = getFragmentManager().beginTransaction();
-            transaction.replace(R.id.main_frame, team);
+            transaction.replace(R.id.main_frame, newFragment);
             // transaction.addToBackStack(null);
             transaction.commit();
-
-            toolbar.setTitle(R.string.nav_team);
-        } else if (id == R.id.nav_map) {
-
-            MapFragment map = new MapFragment();
-            FragmentTransaction transaction = getFragmentManager().beginTransaction();
-            transaction.replace(R.id.main_frame, map);
-            // transaction.addToBackStack(null);
-            transaction.commit();
-
-            toolbar.setTitle(R.string.nav_map);
-        } else if (id == R.id.nav_chat) {
-
-            ChatFragment chat = new ChatFragment();
-            FragmentTransaction transaction = getFragmentManager().beginTransaction();
-            transaction.replace(R.id.main_frame, chat);
-            // transaction.addToBackStack(null);
-            transaction.commit();
-
-            toolbar.setTitle(R.string.nav_chat);
-        } else if (id == R.id.nav_settings) {
-
-            SettingsFragment settings = new SettingsFragment();
-            FragmentTransaction transaction = getFragmentManager().beginTransaction();
-            transaction.replace(R.id.main_frame, settings);
-            transaction.addToBackStack(null);
-            transaction.commit();
-
-            toolbar.setTitle(R.string.nav_settings);
+            toolbar.setTitle(newTitle);
         }
 
         DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);

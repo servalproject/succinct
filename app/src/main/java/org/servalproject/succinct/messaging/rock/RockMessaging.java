@@ -1,6 +1,10 @@
 package org.servalproject.succinct.messaging.rock;
 
+import android.bluetooth.BluetoothAdapter;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.location.Location;
 import android.util.Log;
@@ -41,12 +45,14 @@ import uk.rock7.connect.protocol.R7DeviceResponseDelegate;
 public class RockMessaging implements IMessaging {
 
 	private final Context context;
-	private final SharedPreferences preferences;
 
 	private ConnectComms comms;
 
 	private R7ConnectionState connectionState;
 
+	private BluetoothAdapter adapter;
+	private int blueToothState;
+	private String deviceId;
 	private ConnectDevice connectedDevice;
 	private R7GenericDevice genericDevice;
 
@@ -54,27 +60,66 @@ public class RockMessaging implements IMessaging {
 	private R7ActivationState activationState;
 
 	private R7CommandType commandType;
+	private String lastAction = null;
 	private R7DeviceError lastError;
 
 	private short inboxCount;
+
+	private int batteryLevel;
 
 	private Location lastFix;
 
 	// scanned devices
 	private Map<String, Device> devices = new HashMap<>();
 
-	private static final String ID = "device_id";
-	private static final String PIN = "device_pin";
 	private static final String TAG = "RockMessaging";
 
-	public final Observable observable = new Observable();
+	public final Observable observable = new Observable(){
+		@Override
+		public void notifyObservers() {
+			setChanged();
+			super.notifyObservers();
+		}
+
+		@Override
+		public void notifyObservers(Object arg) {
+			setChanged();
+			super.notifyObservers(arg);
+		}
+	};
+
 	public static final int MTU = 332;
 	public static final int RAW_MTU = 338;
 
-	public RockMessaging(Context context, SharedPreferences preferences){
+	private final BroadcastReceiver receiver = new BroadcastReceiver() {
+		@Override
+		public void onReceive(Context context, Intent intent) {
+			String action = intent.getAction();
+			if (action.equals(BluetoothAdapter.ACTION_STATE_CHANGED)){
+				setBlueToothState(intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, -1));
+			}
+		}
+	};
+
+	public RockMessaging(Context context){
 		this.context = context;
-		this.preferences = preferences;
-		init();
+		IntentFilter i = new IntentFilter();
+		i.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+		context.registerReceiver(receiver, i);
+		adapter = BluetoothAdapter.getDefaultAdapter();
+		setBlueToothState(adapter.getState());
+	}
+
+	private void setBlueToothState(int state){
+		blueToothState = state;
+		Log.v(TAG, "Bluetooth state == "+state);
+
+		if (comms == null) {
+			if (state == BluetoothAdapter.STATE_ON)
+				init();
+		}else{
+			checkState();
+		}
 	}
 
 	private void init(){
@@ -91,33 +136,76 @@ public class RockMessaging implements IMessaging {
 	}
 
 	public String getStatus(){
+		if (!adapter.isEnabled())
+			return "Bluetooth is off";
 		if (connectionState == null)
 			return "Initialising";
 		if (connectedDevice!=null){
-			if (lockState != R7LockState.R7LockStateUnlocked)
-				return "Locked: "+lockState;
-			return "Connected to "+connectedDevice.getName()+", "+connectionState;
+			return comms.isConnected()+" "+connectionState+" to "+connectedDevice.getName()+" "+lockState;
 		}
-		return null;
+		return comms.isConnected()+" "+connectionState;
 	}
 
-	public String lastError(){
-		if (lastError==null)
+	private void setLastAction(String action){
+		Log.v(TAG, action);
+		lastAction = action;
+		lastError = null;
+		observable.notifyObservers();
+	}
+
+	public String lastAction(){
+		if (lastAction == null)
 			return null;
-		return lastError.toString();
+		return lastAction+(lastError==null ? "" : " "+lastError);
+	}
+
+	public boolean canToggleScan(){
+		return adapter.isEnabled() && comms != null
+				&& (connectionState == R7ConnectionState.R7ConnectionStateReady
+				|| connectionState == R7ConnectionState.R7ConnectionStateDiscovering
+				|| connectionState == R7ConnectionState.R7ConnectionStateIdle
+				|| connectionState == R7ConnectionState.R7ConnectionStateOff);
+	}
+
+	public boolean canDisconnect(){
+		return isConnected() || connectionState == R7ConnectionState.R7ConnectionStateConnecting;
 	}
 
 	public boolean isScanning(){
 		return connectionState == R7ConnectionState.R7ConnectionStateDiscovering;
 	}
 
+	public boolean isEnabled(){
+		return comms != null
+				&& adapter.isEnabled();
+	}
+
+	public int getBatteryLevel() {
+		return batteryLevel;
+	}
+
+	public short getInboxCount() {
+		return inboxCount;
+	}
+
+	public void enable(){
+		setLastAction("Enabling");
+
+		if (comms == null){
+			init();
+		}else{
+			adapter.enable();
+		}
+	}
+
 	public void scan(){
-		Log.v(TAG, "scan");
+		setLastAction("Scanning");
+		checkState();
 		comms.startDiscovery();
 	}
 
 	public void stopScanning(){
-		Log.v(TAG, "stopScanning");
+		setLastAction("Stop Scanning");
 		comms.stopDiscovery();
 	}
 
@@ -125,15 +213,27 @@ public class RockMessaging implements IMessaging {
 		return devices.values();
 	}
 
+	private void checkState(){
+		if ((connectionState == R7ConnectionState.R7ConnectionStateIdle
+				||connectionState == R7ConnectionState.R7ConnectionStateOff)
+				&& adapter.isEnabled()) {
+			// (mostly) harmless method that should trigger an enabled check
+			Log.v(TAG, "Fixing state by enabling again");
+			comms.enableWithApplicationIdentifier(BuildConfig.rockAppId);
+		}
+	}
+
 	// Connect to this device, remember the device and auto reconnect
 	public void connect(Device device){
-		Log.v(TAG, "connect("+device.id+")");
-		// TODO, only set preference after successful connection?
-		SharedPreferences.Editor e = preferences.edit();
-		e.putString(ID, device.id);
-		e.apply();
-
+		setLastAction("Connecting to "+device.id);
+		checkState();
+		deviceId = device.id;
 		comms.connect(device.id);
+	}
+
+	public void disconnect(){
+		setLastAction("Disconnecting");
+		comms.disconnect();
 	}
 
 	// Do we have a device connection?
@@ -142,38 +242,59 @@ public class RockMessaging implements IMessaging {
 	}
 
 	// Do we need to prompt for a pin?
-	public boolean isLocked(){
-		return lockState == R7LockState.R7LockStateLocked ||
-				lockState == R7LockState.R7LockStateIncorrectPin;
+	public R7LockState getLockState(){
+		return lockState;
 	}
 
 	public void enterPin(short pin){
-		Log.v(TAG, "enterPin("+pin+")");
-		SharedPreferences.Editor e = preferences.edit();
-		e.putInt(PIN, pin);
-		e.apply();
+		setLastAction("Entering PIN");
 		comms.unlock(pin);
 	}
 
-	public void requestGpsFix(){
-		Log.v(TAG, "requestGpsFix");
+	public void requestNewGpsFix(){
+		setLastAction("Requesting new fix");
 		comms.requestCurrentGpsPosition();
+	}
+	public void requestGpsFix(){
+		setLastAction("Requesting last fix");
+		comms.requestLastKnownGpsPosition();
+	}
+	public Location getLatestFix(){
+		return lastFix;
 	}
 
 	public void requestBeep(){
-		Log.v(TAG, "requestBeep");
+		setLastAction("Requesting BEEP");
 		comms.requestBeep();
 	}
 
-	public short sendMessage(byte bytes[], short messageId){
-		return comms.sendMessageWithDataAndIdentifier(bytes, messageId);
+	public boolean canSendMessage(){
+		if (comms == null)
+			return false;
+		Boolean b = comms.isMessagingReady();
+		return b!=null && b;
 	}
 
-	public short sendRawMessage(byte bytes[], short messageId){
-		return comms.sendRawMessageWithDataAndIdentifier(bytes, messageId);
+	public boolean canSendRawMessage(){
+		if (comms == null)
+			return false;
+		Boolean b = comms.rawMessagingAvailable();
+		return b!=null && b;
+	}
+
+	private short nextId=0;
+	public short sendMessage(byte bytes[]){
+		setLastAction("Sending Message");
+		return comms.sendMessageWithDataAndIdentifier(bytes, nextId++);
+	}
+
+	public short sendRawMessage(byte bytes[]){
+		setLastAction("Sending Raw Message");
+		return comms.sendRawMessageWithDataAndIdentifier(bytes, nextId++);
 	}
 
 	public void onTrimMemory(int level){
+		Log.v(TAG, "onTrimMemory("+level+")");
 		comms.trimMemory(level);
 	}
 
@@ -182,8 +303,13 @@ public class RockMessaging implements IMessaging {
 	}
 
 	public void requestParameter(R7GenericDeviceParameter parameter){
-		Log.v(TAG, "requestParameter("+parameter+")");
+		setLastAction("Requesting Parameter");
 		genericDevice.requestParameter(parameter);
+	}
+
+	public void updateParameter(R7GenericDeviceParameter parameter, int value){
+		setLastAction("Updating Parameter");
+		genericDevice.updateParameter(parameter, value);
 	}
 
 	private static String toString(byte[] bytes){
@@ -218,9 +344,6 @@ public class RockMessaging implements IMessaging {
 				devices.put(deviceId, (d = new Device(deviceId, name)));
 			}
 			observable.notifyObservers();
-
-			// TODO remove once we have a UI
-			connect(d);
 		}
 
 		@Override
@@ -260,14 +383,7 @@ public class RockMessaging implements IMessaging {
 	private R7DeviceResponseDelegate response = new R7DeviceResponseDelegate(){
 		@Override
 		public void deviceReady() {
-			// not reliable?
 			Log.v(TAG, "deviceReady");
-			// first callback
-			String id = preferences.getString(ID,null);
-			if (id != null)
-				comms.connect(id);
-			else
-				comms.startDiscovery();
 		}
 
 		@Override
@@ -279,13 +395,6 @@ public class RockMessaging implements IMessaging {
 			RockMessaging.this.genericDevice = (connectDevice instanceof R7GenericDevice) ?
 						(R7GenericDevice) connectDevice : null;
 			observable.notifyObservers();
-
-			if (lockState == R7LockState.R7LockStateLocked){
-				// always try a configured pin, or the default
-				int pin = preferences.getInt(PIN, 1234);
-				Log.v(TAG, "unlock("+pin+")");
-				comms.unlock((short) pin);
-			}
 		}
 
 		@Override
@@ -295,28 +404,34 @@ public class RockMessaging implements IMessaging {
 			RockMessaging.this.activationState = null;
 			RockMessaging.this.lockState = null;
 			RockMessaging.this.genericDevice = null;
+			deviceId = null;
 			observable.notifyObservers();
 		}
 
 		@Override
 		public void deviceParameterUpdated(DeviceParameter deviceParameter) {
-			int val = deviceParameter.getCachedValue();
 			R7GenericDeviceParameter type = R7GenericDeviceParameter.values()[deviceParameter.getIdentifier()];
+			Boolean ro = deviceParameter.getReadonly();
+
 			Log.v(TAG, "deviceParameterUpdated("+
-					type+" ("+deviceParameter.getLabel()+"), "+
+					type+" ("+deviceParameter.getLabel()+
+					(ro!=null && ro?" RO":"")+
+					"), "+
 					getValueLabel(deviceParameter)+")");
 		}
 
 		@Override
 		public void deviceBatteryUpdated(int i, Date date) {
+			RockMessaging.this.batteryLevel = i;
 			Log.v(TAG, "deviceBatteryUpdated("+i+", "+date+")");
 		}
 
 		@Override
 		public void deviceStateChanged(R7ConnectionState stateTo, R7ConnectionState stateFrom) {
 			Log.v(TAG, "deviceStateChanged("+stateTo+", "+stateFrom+")");
-
 			RockMessaging.this.connectionState = stateTo;
+			RockMessaging.this.lastAction = null;
+			RockMessaging.this.lastError = null;
 			observable.notifyObservers();
 		}
 
@@ -335,15 +450,15 @@ public class RockMessaging implements IMessaging {
 
 			if (genericDevice!=null && r7LockState == R7LockState.R7LockStateUnlocked){
 				// device is now ready for more commands...
-				requestBeep();
-				Log.v(TAG, "requestLastKnownGpsPosition");
-				comms.requestLastKnownGpsPosition();
-				/* TODO request interesting parameter values?
+				requestGpsFix();
+			/*
+				// TODO request interesting parameter values?
 				R7GenericDeviceParameter values[] = R7GenericDeviceParameter.values();
 				for(DeviceParameter p: connectedDevice.parameters()){
 					if (p.getAvailiable() && !p.isCachedValueUsable())
 						requestParameter(values[p.getIdentifier()]);
-				}*/
+				}
+			*/
 			}
 		}
 
@@ -375,6 +490,8 @@ public class RockMessaging implements IMessaging {
 		public void locationUpdated(Location location) {
 			Log.v(TAG, "locationUpdated("+location+" "+new Date(location.getTime())+")");
 			RockMessaging.this.lastFix = location;
+			RockMessaging.this.lastAction = null;
+			RockMessaging.this.lastError = null;
 			observable.notifyObservers();
 		}
 

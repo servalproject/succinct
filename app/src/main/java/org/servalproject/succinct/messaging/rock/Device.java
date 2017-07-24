@@ -1,6 +1,8 @@
 package org.servalproject.succinct.messaging.rock;
 
-public class Device {
+import android.support.annotation.NonNull;
+
+public class Device implements Comparable<Device>{
 	public final String id;
 	String name;
 
@@ -11,5 +13,10 @@ public class Device {
 
 	public String getName(){
 		return name;
+	}
+
+	@Override
+	public int compareTo(@NonNull Device device) {
+		return id.compareTo(device.id);
 	}
 }

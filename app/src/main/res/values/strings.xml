@@ -8,4 +8,12 @@
     <string name="nav_map">Map</string>
     <string name="nav_chat">Messaging</string>
     <string name="nav_settings">Settings</string>
+    <string name="rock_scan">Scan</string>
+    <string name="rock_beep">Beep</string>
+    <string name="nav_rock">Iridium Connection</string>
+    <string name="rock_disconnect">Disconnect</string>
+    <string name="rock_unlock">Enter PIN (1234)</string>
+    <string name="rock_send">Send Message (Hello)</string>
+    <string name="rock_send_raw">Send Raw (Hello)</string>
+    <string name="rock_enable">Enable</string>
 </resources>
