@@ -23,7 +23,7 @@ public class App extends Application {
 
 	@Override
 	public void onTrimMemory(int level) {
-		if (rock!=null)
+		if (rock!=null && level!=TRIM_MEMORY_UI_HIDDEN)
 			rock.onTrimMemory(level);
 		super.onTrimMemory(level);
 	}
