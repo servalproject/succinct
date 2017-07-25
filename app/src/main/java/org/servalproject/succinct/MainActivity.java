@@ -286,7 +286,7 @@ public class MainActivity extends AppCompatActivity
     }
 
     private void showGPSDisabledMessage() {
-        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(MainActivity.this);
+        AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
         builder.setMessage("GPS appears to be disabled, do you want to enable it?")
                 .setCancelable(false)
                 .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
