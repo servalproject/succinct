@@ -3,11 +3,16 @@ package org.servalproject.succinct;
 import android.Manifest;
 import android.app.Fragment;
 import android.app.FragmentTransaction;
+import android.content.ComponentName;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.location.Location;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.IBinder;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.design.widget.NavigationView;
@@ -21,9 +26,12 @@ import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.Toast;
 
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
 import org.mapsforge.map.layer.cache.TileCache;
+import org.servalproject.succinct.location.LocationService;
+import org.servalproject.succinct.location.LocationService.LocationBroadcastReceiver;
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener {
@@ -36,6 +44,9 @@ public class MainActivity extends AppCompatActivity
     };
     private static final int PERMISSION_CALLBACK_CONSTANT = 100;
     private static final int PERMISSION_SETTINGS_INTENT_ID = 101;
+
+    private LocationService locationService;
+    private boolean locationServiceBound;
 
     public enum PermissionState {
         PERMITTED,
@@ -71,6 +82,9 @@ public class MainActivity extends AppCompatActivity
         PermissionState state = checkAllPermissions();
         // todo handle state (should be either PERMITTED or WAITING)
 
+        Log.d(TAG, "starting LocationService");
+        startService(new Intent(this, LocationService.class));
+
         // Initialise AndroidGraphicFactory (used by maps)
         AndroidGraphicFactory.createInstance(getApplication());
     }
@@ -78,7 +92,30 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onDestroy() {
         AndroidGraphicFactory.clearResourceMemoryCache();
+        // todo later we will want to keep the location service running e.g. if in active team state
+        Log.d(TAG, "stopping LocationService");
+        stopService(new Intent(this, LocationService.class));
         super.onDestroy();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        Log.d(TAG, "binding to LocationService");
+        bindService(new Intent(this, LocationService.class), locationServiceConnection, Context.BIND_IMPORTANT);
+        Log.d(TAG, "registering receiver for GPS status");
+        locationBroadcastReceiver.register(this);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if (locationServiceBound) {
+            Log.d(TAG, "unbinding from LocationService");
+            unbindService(locationServiceConnection);
+        }
+        Log.d(TAG, "un-registering receiver for GPS status");
+        locationBroadcastReceiver.unregister(this);
     }
 
     @Override
@@ -248,6 +285,25 @@ public class MainActivity extends AppCompatActivity
         builder.show();
     }
 
+    private void showGPSDisabledMessage() {
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(MainActivity.this);
+        builder.setMessage("GPS appears to be disabled, do you want to enable it?")
+                .setCancelable(false)
+                .setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                        startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+                    }
+                })
+                .setNegativeButton("No", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialogInterface, int i) {
+                        dialogInterface.cancel();
+                    }
+                });
+        builder.show();
+    }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -263,4 +319,39 @@ public class MainActivity extends AppCompatActivity
         }
         return tileCache;
     }
+
+    private final ServiceConnection locationServiceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
+            LocationService.LocationBinder binder = (LocationService.LocationBinder) iBinder;
+            locationService = binder.getService();
+            locationServiceBound = true;
+
+            if (!locationService.isGPSEnabled()) {
+                showGPSDisabledMessage();
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName componentName) {
+            locationServiceBound = false;
+            locationService = null;
+        }
+    };
+
+    private final LocationBroadcastReceiver locationBroadcastReceiver = new LocationBroadcastReceiver() {
+        @Override
+        public void onDisabled() {
+            showGPSDisabledMessage();
+        }
+
+        @Override
+        public void onEnabled() {
+        }
+
+        @Override
+        public void onNewLocation(Location location) {
+            Toast.makeText(MainActivity.this, location.toString(), Toast.LENGTH_LONG).show();
+        }
+    };
 }
