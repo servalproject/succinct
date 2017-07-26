@@ -1,14 +1,17 @@
 package org.servalproject.succinct;
 
 import android.content.Context;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.app.Fragment;
 import android.os.Environment;
+import android.support.v4.content.ContextCompat;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
+import org.mapsforge.core.graphics.Bitmap;
 import org.mapsforge.core.model.LatLong;
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
 import org.mapsforge.map.android.util.AndroidUtil;
@@ -18,6 +21,7 @@ import org.mapsforge.map.layer.cache.TileCache;
 import org.mapsforge.map.layer.renderer.TileRendererLayer;
 import org.mapsforge.map.reader.MapFile;
 import org.mapsforge.map.rendertheme.InternalRenderTheme;
+import org.servalproject.succinct.location.MapLocationLayer;
 
 import java.io.File;
 
@@ -71,7 +75,20 @@ public class MapFragment extends Fragment {
             map.getLayerManager().getLayers().add(tileRendererLayer);
             map.setCenter(new LatLong(-34.9285, 138.6007));
             map.setZoomLevel((byte) 16);
+
+            Drawable drawable = ContextCompat.getDrawable(getActivity(), R.drawable.marker_mylocation);
+            Bitmap bitmap = AndroidGraphicFactory.convertToBitmap(drawable);
+            MapLocationLayer mapLocationLayer = new MapLocationLayer(bitmap);
+            mapLocationLayer.addToMap(map);
+            mapLocationLayer.center(map, true);
+            mapLocationLayer.activate(getActivity());
         }
         return view;
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        // myLocationOverlay.disableMyLocation();
     }
 }
