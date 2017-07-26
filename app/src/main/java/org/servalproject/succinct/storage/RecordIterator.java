@@ -3,24 +3,15 @@ package org.servalproject.succinct.storage;
 import java.io.IOException;
 
 public class RecordIterator<T> {
-	private final RecordStore<T> store;
+	private final Factory<T> factory;
+	private final RecordStore store;
 	private long offset;
 	private int recordLength;
 
-	RecordIterator(RecordStore<T> store) {
+	public RecordIterator(RecordStore store, Factory<T> factory) {
 		this.store = store;
+		this.factory = factory;
 		start();
-	}
-
-	public void setMark(String name){
-		store.marks.put(name, offset);
-	}
-
-	public boolean restoreMark(String name){
-		if (!store.marks.containsKey(name))
-			return false;
-		offset = store.marks.get(name);
-		return true;
 	}
 
 	public void start() {
@@ -54,6 +45,11 @@ public class RecordIterator<T> {
 			return null;
 		byte[] bytes = new byte[recordLength - 8];
 		store.readBytes(offset+4, bytes);
-		return store.factory.create(bytes);
+		return factory.create(bytes);
+	}
+
+	public void append(T object) throws IOException {
+		byte[] bytes = factory.serialise(object);
+		store.appendRecord(bytes);
 	}
 }
