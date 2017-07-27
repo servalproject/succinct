@@ -120,6 +120,7 @@ public class RockMessaging implements IMessaging {
 		}else{
 			checkState();
 		}
+		observable.notifyObservers();
 	}
 
 	private void init(){
