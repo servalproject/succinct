@@ -9,6 +9,11 @@ public class App extends Application {
 	public static Handler UIHandler;
 	private RockMessaging rock;
 
+	static {
+		// ensure our jni library has been loaded
+		System.loadLibrary("native-lib");
+	}
+
 	public RockMessaging getRock(){
 		if (rock == null)
 			rock = new RockMessaging(this);

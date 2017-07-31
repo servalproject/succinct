@@ -19,10 +19,6 @@ public class Storage {
 			throw new IllegalStateException("storage open failed");
 	}
 
-	static {
-		System.loadLibrary("native-lib");
-	}
-
 	public RecordStore openFile(String relativePath) throws IOException {
 		// TODO cache objects?
 		return new RecordStore(this, relativePath);
