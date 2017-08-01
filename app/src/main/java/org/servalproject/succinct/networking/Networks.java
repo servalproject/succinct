@@ -3,12 +3,14 @@ package org.servalproject.succinct.networking;
 
 import android.util.Log;
 
+import org.servalproject.succinct.App;
+
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
 public class Networks {
 	// TODO refactor if / when other jni polling needs to occur
-	private native void poll();
+	private native void beginPolling();
 	private static final String TAG = "Networks";
 
 	private static Networks instance;
@@ -18,18 +20,16 @@ public class Networks {
 		return instance;
 	}
 
-
 	private Networks(){
-		Thread thread = new Thread(new Runnable() {
+		App.backgroundHandler.post(new Runnable() {
 			@Override
 			public void run() {
-				poll();
-				throw new IllegalStateException("Unreachable");
+				beginPolling();
 			}
-		}, "Networks");
-		thread.start();
+		});
 	}
 
+	// called from JNI
 	private void onAdd(String name, byte[] addr, byte[] broadcast, int prefixLen){
 		try {
 			InetAddress interfaceAddress = InetAddress.getByAddress(addr);
@@ -42,6 +42,7 @@ public class Networks {
 		}
 	}
 
+	// called from JNI
 	private void onRemove(String name, byte[] addr, byte[] broadcast, int prefixLen){
 		try {
 			InetAddress interfaceAddress = InetAddress.getByAddress(addr);

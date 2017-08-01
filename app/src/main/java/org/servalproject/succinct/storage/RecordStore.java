@@ -28,6 +28,7 @@ public class RecordStore {
 			throw new IllegalStateException("file open failed");
 	}
 
+	// called from JNI
 	private void jniCallback(long length){
 		appendOffset = EOF = length;
 		// TODO observer callbacks after syncing changes?

@@ -1,18 +1,18 @@
 
 #include <string.h>
 #include <sys/socket.h>
-#include <poll.h>
-#include <sys/types.h>
-#include <sys/un.h>
-#include <netinet/in.h>
-#include <stdint.h>
 #include <unistd.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
+#include <android/looper.h>
+#include <android/log.h>
 #include "networks.h"
+#include "native-lib.h"
 
-jmethodID jni_onAdd;
-jmethodID jni_onRemove;
+#define LOGIF(X, ...) __android_log_print(ANDROID_LOG_INFO, "NetworksJNI", X, ##__VA_ARGS__)
+
+static jmethodID jni_onAdd;
+static jmethodID jni_onRemove;
 
 static int netlink_socket() {
     int sock = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_ROUTE);
@@ -104,6 +104,12 @@ static void read_addresses(JNIEnv *env, jobject object, int fd){
                 env->CallVoidMethod(object,
                                     nlh->nlmsg_type == RTM_NEWADDR ? jni_onAdd: jni_onRemove,
                                     name, addr_bytes, broadcast_bytes, ifa->ifa_prefixlen);
+                if (name)
+                    env->DeleteLocalRef(name);
+                if (addr_bytes)
+                    env->DeleteLocalRef(addr_bytes);
+                if (broadcast_bytes)
+                    env->DeleteLocalRef(broadcast_bytes);
 
                 if (env->ExceptionCheck()){
                     env->ExceptionDescribe();
@@ -124,32 +130,40 @@ static int set_nonblock(int fd){
     return 0;
 }
 
-static void jni_networks_poll(JNIEnv *env, jobject object){
-    struct pollfd fds;
-    memset(&fds, 0, sizeof fds);
-    fds.fd = netlink_socket();
-    fds.events = POLLIN;
-
-    request_addresses(fds.fd);
-    set_nonblock(fds.fd);
-
-    while(1){
-        int r = poll(&fds, 1, 0);
-        if (r == -1) {
-            // log error?
-        } else if (r==0){
-            // timeout?
-        } else {
-            if (fds.revents & POLLIN)
-                read_addresses(env, object, fds.fd);
+static int looper_callback(int fd, int events, void *data){
+    if (events & ALOOPER_EVENT_INPUT){
+        JNIEnv* env;
+        if (java_vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_OK){
+            jobject network_ref = (jobject)data;
+            read_addresses(env, network_ref, fd);
         }
-    };
+    }
+    return 1;
+}
+
+static void jni_networks_poll(JNIEnv *env, jobject object) {
+    int fd = netlink_socket();
+
+    request_addresses(fd);
+    set_nonblock(fd);
+
+    ALooper *looper = ALooper_forThread();
+    if (!looper){
+        LOGIF("Failed to get looper");
+        return;
+    }
+
+    jobject network_ref = env->NewGlobalRef(object);
+
+    if (ALooper_addFd(looper, fd, ALOOPER_POLL_CALLBACK, ALOOPER_EVENT_INPUT, looper_callback,
+                  network_ref)!=1)
+        LOGIF("Failed to add file descriptor %d", fd);
 }
 
 #define NELS(X) (sizeof(X) / sizeof(X[0]))
 
 static JNINativeMethod networks_methods[] = {
-        {"poll", "()V", (void*)jni_networks_poll },
+        {"beginPolling", "()V", (void*)jni_networks_poll },
 };
 
 int jni_register_networks(JNIEnv* env){
