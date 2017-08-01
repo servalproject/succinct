@@ -20,6 +20,8 @@ add_library( # Sets the name of the library.
              src/main/cpp/native-lib.cpp
              src/main/cpp/hash.c
              src/main/cpp/hash.h
+             src/main/cpp/networks.h
+             src/main/cpp/networks.cpp
              src/main/cpp/storage.h
              src/main/cpp/storage.cpp
              src/main/cpp/lmdb/mdb.c

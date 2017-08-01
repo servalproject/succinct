@@ -4,6 +4,7 @@ import android.app.Application;
 import android.os.Handler;
 
 import org.servalproject.succinct.messaging.rock.RockMessaging;
+import org.servalproject.succinct.networking.Networks;
 
 public class App extends Application {
 	public static Handler UIHandler;
@@ -24,6 +25,7 @@ public class App extends Application {
 	public void onCreate() {
 		super.onCreate();
 		UIHandler = new Handler(this.getMainLooper());
+		Networks.getInstance();
 	}
 
 	@Override

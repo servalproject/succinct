@@ -203,12 +203,12 @@ static jint JNICALL jni_file_flush(JNIEnv *env, jobject object, jlong store_ptr,
 
 #define NELS(X) (sizeof(X) / sizeof(X[0]))
 
-JNINativeMethod storage_methods[] = {
+static JNINativeMethod storage_methods[] = {
         {"open", "(Ljava/lang/String;)J", (void*)jni_storage_open },
         {"close", "(J)V", (void*)jni_storage_close },
 };
 
-JNINativeMethod file_methods[] = {
+static JNINativeMethod file_methods[] = {
         {"open", "(JLjava/lang/String;)J", (void*)jni_file_open },
         {"append", "(J[BII)V", (void*)jni_file_append },
         {"flush", "(JJ)I", (void*)jni_file_flush },
@@ -217,21 +217,21 @@ JNINativeMethod file_methods[] = {
 
 int jni_register_storage(JNIEnv* env){
     jclass store = env->FindClass("org/servalproject/succinct/storage/Storage");
-    if (env->ExceptionOccurred())
+    if (env->ExceptionCheck())
         return -1;
 
     env->RegisterNatives(store, storage_methods, NELS(storage_methods));
-    if (env->ExceptionOccurred())
+    if (env->ExceptionCheck())
         return -1;
 
     jclass file = env->FindClass("org/servalproject/succinct/storage/RecordStore");
-    if (env->ExceptionOccurred())
+    if (env->ExceptionCheck())
         return -1;
     jni_callback = env->GetMethodID(file, "jniCallback", "(J)V");
-    if (env->ExceptionOccurred())
+    if (env->ExceptionCheck())
         return -1;
     env->RegisterNatives(file, file_methods, NELS(file_methods));
-    if (env->ExceptionOccurred())
+    if (env->ExceptionCheck())
         return -1;
     return 0;
 }
