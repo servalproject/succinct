@@ -1,11 +1,14 @@
 package org.servalproject.succinct;
 
 import android.app.Application;
+import android.net.Network;
 import android.os.Handler;
 import android.os.HandlerThread;
 
 import org.servalproject.succinct.messaging.rock.RockMessaging;
 import org.servalproject.succinct.networking.Networks;
+
+import java.net.SocketException;
 
 public class App extends Application {
 	public static Handler UIHandler;
@@ -14,17 +17,17 @@ public class App extends Application {
 	// a single background thread for short work tasks
 	public static Handler backgroundHandler;
 
-	static {
-		// ensure our jni library has been loaded
-		System.loadLibrary("native-lib");
-	}
-
 	public RockMessaging getRock(){
 		if (rock == null)
 			rock = new RockMessaging(this);
 		return rock;
 	}
 
+	static {
+		// ensure our jni library has been loaded
+		System.loadLibrary("native-lib");
+	}
+	
 	@Override
 	public void onCreate() {
 		super.onCreate();
@@ -32,7 +35,12 @@ public class App extends Application {
 		HandlerThread backgroundThread = new HandlerThread("Background");
 		backgroundThread.start();
 		backgroundHandler = new Handler(backgroundThread.getLooper());
-		Networks.getInstance();
+
+		try {
+			Networks.init(this);
+		} catch (SocketException e) {
+			throw new IllegalStateException("");
+		}
 	}
 
 	@Override
