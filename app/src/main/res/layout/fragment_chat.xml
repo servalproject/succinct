@@ -1,13 +1,35 @@
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     tools:context="org.servalproject.succinct.ChatFragment">
 
-    <!-- TODO: Update blank fragment layout -->
-    <TextView
+    <android.support.v7.widget.RecyclerView
+        android:id="@+id/chatRecycler"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:text="Chat fragment" />
+        android:layout_height="wrap_content"
+        android:layout_above="@+id/messageText"
+        android:layout_alignParentTop="true"
+        android:layout_marginBottom="10dp"
+        android:background="#ffffee"
+        app:layoutManager="android.support.v7.widget.LinearLayoutManager"
+        app:stackFromEnd="true"
+        tools:listitem="@layout/chat_item" />
 
-</FrameLayout>
+    <EditText
+        android:id="@+id/messageText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentStart="true"
+        android:layout_alignParentBottom="true"
+        android:layout_toStartOf="@+id/sendButton" />
+
+    <Button
+        android:id="@+id/sendButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentBottom="true"
+        android:text="Send" />
+</RelativeLayout>
