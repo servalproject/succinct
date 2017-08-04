@@ -10,8 +10,11 @@ import android.provider.BaseColumns;
 import android.support.annotation.IntDef;
 import android.util.Log;
 
+import org.servalproject.succinct.team.TeamMember;
+
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Calendar;
 import java.util.Date;
 
 /**
@@ -40,6 +43,7 @@ public class ChatDatabase extends SQLiteOpenHelper {
         public Date time;
         public String message;
         public boolean isRead;
+        public boolean isFirstOnDay;
         public boolean sentByMe;
 
         public ChatMessage(ChatMessageCursor c) {
@@ -50,6 +54,22 @@ public class ChatDatabase extends SQLiteOpenHelper {
             time = new Date(c.getLong(3));
             message = c.getString(4);
             isRead = (c.getInt(5) != 0);
+            sentByMe = TeamMember.myself().getName().equals(sender); // fixme check for self-sent properly
+
+            // check if we should show the full date with this message
+            // fixme manipulating the cursor works but is not a good approach
+            if (c.isFirst()) {
+                isFirstOnDay = true;
+            } else {
+                long day, prevDay;
+                Calendar cal = Calendar.getInstance();
+                cal.setTime(time);
+                day = cal.get(Calendar.YEAR)*1000+cal.get(Calendar.DAY_OF_YEAR);
+                c.moveToPrevious();
+                cal.setTimeInMillis(c.getLong(3));
+                prevDay = cal.get(Calendar.YEAR)*1000+cal.get(Calendar.DAY_OF_YEAR);
+                isFirstOnDay = (day != prevDay);
+            }
         }
     }
 

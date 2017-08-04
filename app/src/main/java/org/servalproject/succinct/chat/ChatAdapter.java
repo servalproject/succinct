@@ -23,6 +23,7 @@ import java.util.List;
 public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHolder> {
     private static final String TAG = "ChatAdapter";
     private DateFormat timeFormat = DateFormat.getTimeInstance(DateFormat.SHORT);
+    private DateFormat dateFormat = DateFormat.getDateInstance(DateFormat.LONG);
     private boolean atBottom = false;
     private ChatMessageCursor cursor;
 
@@ -56,6 +57,15 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
     public void onBindViewHolder(MessageViewHolder holder, int position) {
         cursor.moveToPosition(position);
         ChatMessage msg = new ChatMessage(cursor);
+
+        if (msg.isFirstOnDay) {
+            holder.horizontalRule.setVisibility(View.VISIBLE);
+            holder.date.setText(dateFormat.format(msg.time));
+            holder.date.setVisibility(View.VISIBLE);
+        } else {
+            holder.horizontalRule.setVisibility(View.GONE);
+            holder.date.setVisibility(View.GONE);
+        }
 
         holder.message.setText(msg.message);
         holder.sender.setText(msg.sender);
@@ -100,11 +110,15 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
     }
 
     public class MessageViewHolder extends RecyclerView.ViewHolder {
+        protected View horizontalRule;
+        protected TextView date;
         protected TextView sender;
         protected TextView message;
         protected TextView time;
         public MessageViewHolder(View view) {
             super(view);
+            horizontalRule = view.findViewById(R.id.horizontal_rule);
+            date = (TextView) view.findViewById(R.id.dateText);
             sender = (TextView) view.findViewById(R.id.senderText);
             message = (TextView) view.findViewById(R.id.messageText);
             time = (TextView) view.findViewById(R.id.messageTime);

@@ -4,13 +4,35 @@
     android:layout_height="wrap_content"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <View
+        android:id="@+id/horizontal_rule"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_alignParentTop="true"
+        android:layout_marginTop="10dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp"
+        android:background="#aaaaaa"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/dateText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textAlignment="center"
+        android:textSize="12sp"
+        android:layout_below="@+id/horizontal_rule"
+        android:visibility="gone"
+        tools:text="20 August 1987" />
+
     <TextView
         android:id="@+id/senderText"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="10dp"
         android:layout_marginEnd="10dp"
-        android:layout_alignParentTop="true"
+        android:layout_below="@+id/dateText"
+        android:layout_alignWithParentIfMissing="true"
         android:textSize="12sp"
         android:textStyle="bold"
         tools:text="Dutch Schaefer" />
