@@ -1,7 +1,10 @@
 package org.servalproject.succinct.chat;
 
 import android.database.Cursor;
+import android.graphics.drawable.GradientDrawable;
 import android.provider.BaseColumns;
+import android.support.annotation.IntDef;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.widget.RecyclerView;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -13,7 +16,10 @@ import org.servalproject.succinct.R;
 import org.servalproject.succinct.chat.ChatDatabase.ChatMessage;
 import org.servalproject.succinct.chat.ChatDatabase.ChatMessageCursor;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.text.DateFormat;
+import java.util.InputMismatchException;
 import java.util.List;
 
 /**
@@ -26,6 +32,12 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
     private DateFormat dateFormat = DateFormat.getDateInstance(DateFormat.LONG);
     private boolean atBottom = false;
     private ChatMessageCursor cursor;
+
+    @IntDef({TYPE_MESSAGE_RECEIVED, TYPE_MESSAGE_SENT})
+    @Retention(RetentionPolicy.SOURCE)
+    private @interface ChatViewType {}
+    private static final int TYPE_MESSAGE_RECEIVED = 0;
+    private static final int TYPE_MESSAGE_SENT = 1;
 
     public ChatAdapter() {
         setHasStableIds(true);
@@ -48,9 +60,20 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
     }
 
     @Override
-    public MessageViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.chat_item, parent, false);
-        return new MessageViewHolder(view);
+    public MessageViewHolder onCreateViewHolder(ViewGroup parent, @ChatViewType int viewType) {
+        int layout;
+        switch (viewType) {
+            case TYPE_MESSAGE_RECEIVED:
+                layout = R.layout.chat_item;
+                break;
+            case TYPE_MESSAGE_SENT:
+                layout = R.layout.chat_item_sent;
+                break;
+            default:
+                throw new IllegalArgumentException();
+        }
+        View view = LayoutInflater.from(parent.getContext()).inflate(layout, parent, false);
+        return new MessageViewHolder(viewType, view);
     }
 
     @Override
@@ -86,6 +109,19 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
         }
     }
 
+    @Override
+    public @ChatViewType int getItemViewType(int position) {
+        if (cursor == null || !cursor.moveToPosition(position)) {
+            //noinspection WrongConstant
+            return -1;
+        }
+        if (cursor.getInt(ChatMessageCursor.SENT_BY_ME) != 0) {
+            return TYPE_MESSAGE_SENT;
+        } else {
+            return TYPE_MESSAGE_RECEIVED;
+        }
+    }
+
     public void enableStickyScroll(RecyclerView recycler) {
         recycler.scrollToPosition(getItemCount()-1);
         atBottom = true;
@@ -110,13 +146,16 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
     }
 
     public class MessageViewHolder extends RecyclerView.ViewHolder {
+        protected @ChatViewType int type;
         protected View horizontalRule;
         protected TextView date;
         protected TextView sender;
         protected TextView message;
         protected TextView time;
-        public MessageViewHolder(View view) {
+
+        public MessageViewHolder(@ChatViewType int type, View view) {
             super(view);
+            this.type = type;
             horizontalRule = view.findViewById(R.id.horizontal_rule);
             date = (TextView) view.findViewById(R.id.dateText);
             sender = (TextView) view.findViewById(R.id.senderText);

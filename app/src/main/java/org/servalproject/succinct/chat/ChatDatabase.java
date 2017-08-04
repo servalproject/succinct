@@ -54,7 +54,7 @@ public class ChatDatabase extends SQLiteOpenHelper {
             time = new Date(c.getLong(3));
             message = c.getString(4);
             isRead = (c.getInt(5) != 0);
-            sentByMe = TeamMember.myself().getName().equals(sender); // fixme check for self-sent properly
+            sentByMe = (c.getInt(6) != 0);
 
             // check if we should show the full date with this message
             // fixme manipulating the cursor works but is not a good approach
@@ -75,6 +75,7 @@ public class ChatDatabase extends SQLiteOpenHelper {
 
     public static class ChatMessageCursor extends CursorWrapper {
         public static final int ID = 0;
+        public static final int SENT_BY_ME = 6;
         public ChatMessageCursor(Cursor c) {
             super(c);
         }
@@ -82,13 +83,15 @@ public class ChatDatabase extends SQLiteOpenHelper {
 
     public ChatMessageCursor getChatMessageCursor() {
         SQLiteDatabase db = getReadableDatabase();
+        int mySenderId = TeamMember.myself().getId();
         final String SELECT_CHAT_MESSAGES = "SELECT "
                 + ChatMessageTable._TABLE_NAME + "." + ChatMessageTable._ID + ", "
                 + ChatMessageTable.TYPE + ", "
                 + SenderTable.NAME + ", "
                 + ChatMessageTable.TIME + ", "
                 + ChatMessageTable.MESSAGE + ", "
-                + ChatMessageTable.IS_READ + " FROM "
+                + ChatMessageTable.IS_READ + ", "
+                + ChatMessageTable.SENDER + " = " + mySenderId + " AS sent_by_me" + " FROM "
                 + ChatMessageTable._TABLE_NAME + " LEFT JOIN "
                 + SenderTable._TABLE_NAME + " ON "
                 + ChatMessageTable.SENDER + " = " + SenderTable._TABLE_NAME + "." + SenderTable._ID;

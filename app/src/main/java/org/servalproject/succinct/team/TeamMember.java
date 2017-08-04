@@ -8,6 +8,7 @@ public class TeamMember {
     // fixme just a placeholder - will probably remove in future
 
     private String name;
+    private int id;
 
     public String getName() {
         return name;
@@ -17,9 +18,18 @@ public class TeamMember {
         this.name = name;
     }
 
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
+    }
+
     public static TeamMember myself() {
         TeamMember me = new TeamMember();
         me.setName("Joe Bloggs");
+        me.setId(24601);
         return me;
     }
 }
