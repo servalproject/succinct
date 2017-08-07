@@ -10,6 +10,12 @@
 
 // current snapshot
 #define MAX_NAME (256)
+
+struct file_version{
+    uint32_t version; // version
+    char name[MAX_NAME]; // relative path
+};
+
 struct file_data{
     // committed data (for syncing etc)
     uint32_t version; // version
@@ -25,8 +31,22 @@ struct file_data{
 
 struct dbstate{
     MDB_env *env;
-    MDB_dbi db;
+    MDB_dbi files;
+    MDB_dbi index;
+    uint8_t root_hash[crypto_hash_sha256_BYTES];
 };
+
+static jmethodID jni_file_callback;
+
+static void close_db(struct dbstate *state){
+    LOGIF("close_db");
+    if (state->files)
+        mdb_dbi_close(state->env, state->files);
+    if (state->index)
+        mdb_dbi_close(state->env, state->index);
+    mdb_env_close(state->env);
+    memset(&state, 0, sizeof state);
+}
 
 static int open_db(struct dbstate *state, const char *path){
     MDB_txn *txn;
@@ -40,24 +60,35 @@ static int open_db(struct dbstate *state, const char *path){
     if (mdb_txn_begin(state->env, NULL, 0, &txn))
         goto error;
 
-    if (mdb_dbi_open(txn, NULL, MDB_CREATE, &state->db)){
+    if (mdb_dbi_open(txn, "files", MDB_CREATE, &state->files)){
         mdb_txn_abort(txn);
         goto error;
-    }else {
-        mdb_txn_commit(txn);
-        return 0;
     }
 
-    error:
-    mdb_env_close(state->env);
-    return -1;
-}
+    if (mdb_dbi_open(txn, "index", MDB_CREATE, &state->index)){
+        mdb_txn_abort(txn);
+        goto error;
+    }
 
-static void close_db(struct dbstate *state){
-    LOGIF("close_db");
-    mdb_dbi_close(state->env, state->db);
-    mdb_env_close(state->env);
-    memset(&state, 0, sizeof state);
+    // reload the root hash
+    MDB_val key;
+    MDB_val val;
+
+    key.mv_data = (void *)"_";
+    key.mv_size = 1;
+
+    if (mdb_get(txn, state->index, &key, &val) == 0 && val.mv_size == sizeof state->root_hash){
+        memcpy(state->root_hash, val.mv_data, sizeof state->root_hash);
+    }
+
+    if (mdb_txn_commit(txn) != 0)
+        goto error;
+
+    return 0;
+
+error:
+    close_db(state);
+    return -1;
 }
 
 static struct file_data *file_open(struct dbstate *state, const char *name){
@@ -74,7 +105,7 @@ static struct file_data *file_open(struct dbstate *state, const char *name){
     if (key.mv_size>MAX_NAME-1)
         key.mv_size=MAX_NAME-1;
 
-    int r = mdb_get(txn, state->db, &key, &val);
+    int r = mdb_get(txn, state->files, &key, &val);
     if (r!=0 && r!=MDB_NOTFOUND) {
         mdb_txn_abort(txn);
         return NULL;
@@ -113,36 +144,69 @@ static void file_append(struct file_data *file, uint8_t *data, size_t len){
 }
 
 static int file_flush(struct dbstate *state, struct file_data *file){
+    MDB_txn *txn;
+    MDB_val key;
+    MDB_val val;
+    struct file_version new_version;
+    uint8_t old_hash[crypto_hash_sha256_BYTES];
 
     file->version++;
     file->length = file->new_length;
     file->partial_hash = file->new_hash;
 
+    memcpy(old_hash, file->hash, sizeof file->hash);
+
     crypto_hash_sha256_state hash_state = file->new_hash;
     crypto_hash_sha256_final(&hash_state, file->hash);
 
-    MDB_val key;
-    MDB_val val;
+    memset(&new_version, 0, sizeof new_version);
 
-    key.mv_data=(void *)file->name;
-    key.mv_size=strlen(file->name);
-    val.mv_data = file;
-    val.mv_size = PERSIST_LEN;
+    strcpy(new_version.name, file->name);
+    new_version.version = file->version;
 
-    MDB_txn *txn;
     if (mdb_txn_begin(state->env, NULL, 0, &txn)!=0)
         return -1;
 
-    if (mdb_put(txn, state->db, &key, &val, 0)==0){
-        // TODO maintain sync indexes too.
+    key.mv_data = (void *)file->name;
+    key.mv_size = strlen(file->name);
+    val.mv_data = file;
+    val.mv_size = PERSIST_LEN;
 
-        LOGIF("flushed file %s, len %d", file->name, (int)file->length);
-        mdb_txn_commit(txn);
-        return 0;
-    }else{
-        mdb_txn_abort(txn);
-        return -1;
-    }
+    if (mdb_put(txn, state->files, &key, &val, 0)!=0)
+        goto error;
+
+    // TODO purge really old index records?
+    
+    key.mv_data = (void *)file->hash;
+    key.mv_size = sizeof file->hash;
+    val.mv_data = &new_version;
+    val.mv_size = sizeof new_version;
+
+    if (mdb_put(txn, state->index, &key, &val, 0)!=0)
+        goto error;
+
+    // XOR the old and new hash with the root hash
+    for(unsigned i=0;i<sizeof old_hash;i++)
+        old_hash[i] ^= state->root_hash[i] ^ file->hash[i];
+
+    key.mv_data = (void *)"_";
+    key.mv_size = 1;
+    val.mv_data = old_hash;
+    val.mv_size = sizeof old_hash;
+
+    if (mdb_put(txn, state->index, &key, &val, 0)!=0)
+        goto error;
+
+    if (mdb_txn_commit(txn) !=0)
+        goto error;
+
+    memcpy(state->root_hash, old_hash, sizeof old_hash);
+    LOGIF("flushed file %s, len %d", file->name, (int)file->length);
+    return 0;
+
+error:
+    mdb_txn_abort(txn);
+    return -1;
 }
 
 static jlong JNICALL jni_storage_open(JNIEnv *env, jobject object, jstring path)
@@ -166,15 +230,13 @@ static void JNICALL jni_storage_close(JNIEnv *env, jobject object, jlong ptr)
     close_db(state);
 }
 
-static jmethodID jni_callback;
-
 static jlong JNICALL jni_file_open(JNIEnv *env, jobject object, jlong store_ptr, jstring name)
 {
     struct dbstate *state = (struct dbstate *)store_ptr;
     const char *filename = env->GetStringUTFChars(name, NULL);
     struct file_data *ret = file_open(state, filename);
     env->ReleaseStringUTFChars(name, filename);
-    env->CallVoidMethod(object, jni_callback, (jlong)ret->length);
+    env->CallVoidMethod(object, jni_file_callback, (jlong)ret->length);
     return (jlong)ret;
 }
 
@@ -197,7 +259,7 @@ static jint JNICALL jni_file_flush(JNIEnv *env, jobject object, jlong store_ptr,
     struct dbstate *state = (struct dbstate *)store_ptr;
     struct file_data *file = (file_data *) file_ptr;
     int ret = file_flush(state, file);
-    env->CallVoidMethod(object, jni_callback, (jlong)file->length);
+    env->CallVoidMethod(object, jni_file_callback, (jlong)file->length);
     return (jint)ret;
 }
 
@@ -227,7 +289,7 @@ int jni_register_storage(JNIEnv* env){
     jclass file = env->FindClass("org/servalproject/succinct/storage/RecordStore");
     if (env->ExceptionCheck())
         return -1;
-    jni_callback = env->GetMethodID(file, "jniCallback", "(J)V");
+    jni_file_callback = env->GetMethodID(file, "jniCallback", "(J)V");
     if (env->ExceptionCheck())
         return -1;
     env->RegisterNatives(file, file_methods, NELS(file_methods));

@@ -14,7 +14,7 @@ public class Storage {
 
 	public Storage(File root){
 		this.root = root;
-		ptr = open(new File(root, "db").getAbsolutePath());
+		ptr = open(root.getAbsolutePath());
 		if (ptr==0)
 			throw new IllegalStateException("storage open failed");
 	}
