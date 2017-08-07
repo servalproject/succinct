@@ -68,7 +68,7 @@ static void read_addresses(JNIEnv *env, jobject object, int fd){
             case RTM_DELADDR: {
                 struct ifaddrmsg *ifa = (struct ifaddrmsg *) NLMSG_DATA(nlh);
 
-                // ignore loopback addresses
+                // ignore loopback networkLinks
                 if (ifa->ifa_scope == RT_SCOPE_HOST || ifa->ifa_family != AF_INET)
                     continue;
 

@@ -1,7 +1,6 @@
 package org.servalproject.succinct;
 
 import android.app.Application;
-import android.net.Network;
 import android.os.Handler;
 import android.os.HandlerThread;
 
@@ -27,7 +26,7 @@ public class App extends Application {
 		// ensure our jni library has been loaded
 		System.loadLibrary("native-lib");
 	}
-	
+
 	@Override
 	public void onCreate() {
 		super.onCreate();
@@ -38,7 +37,7 @@ public class App extends Application {
 
 		try {
 			Networks.init(this);
-		} catch (SocketException e) {
+		} catch (java.io.IOException e) {
 			throw new IllegalStateException("");
 		}
 	}
