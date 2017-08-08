@@ -2,7 +2,6 @@ package org.servalproject.succinct;
 
 
 import android.app.LoaderManager;
-import android.content.AsyncTaskLoader;
 import android.content.Context;
 import android.content.Loader;
 import android.os.Bundle;
@@ -20,6 +19,7 @@ import android.widget.Button;
 import android.widget.EditText;
 
 import org.servalproject.succinct.chat.ChatAdapter;
+import org.servalproject.succinct.chat.ChatCursorLoader;
 import org.servalproject.succinct.chat.ChatDatabase;
 import org.servalproject.succinct.chat.ChatDatabase.ChatMessageCursor;
 
@@ -91,7 +91,7 @@ public class ChatFragment extends Fragment implements LoaderManager.LoaderCallba
     @Override
     public Loader<ChatMessageCursor> onCreateLoader(int i, Bundle args) {
         Log.d(TAG, "onCreateLoader");
-        return new ChatDatabaseLoader(getActivity());
+        return new ChatCursorLoader(getActivity());
     }
 
     @Override
@@ -104,54 +104,5 @@ public class ChatFragment extends Fragment implements LoaderManager.LoaderCallba
     public void onLoaderReset(Loader<ChatMessageCursor> loader) {
         Log.d(TAG, "onLoaderReset");
         adapter.setCursor(null);
-    }
-
-    private static class ChatDatabaseLoader extends AsyncTaskLoader<ChatMessageCursor> {
-        ChatMessageCursor cursor;
-
-        private ChatDatabaseLoader(Context context) {
-            super(context);
-        }
-
-        @Override
-        public ChatMessageCursor loadInBackground() {
-            Log.d(TAG, "ChatDatabaseLoader loadInBackground");
-            ChatDatabase db = ChatDatabase.getInstance(getContext().getApplicationContext());
-            return db.getChatMessageCursor();
-        }
-
-        @Override
-        public void deliverResult(ChatMessageCursor c) {
-            if (isReset()) {
-                c.close();
-            }
-            ChatMessageCursor old = cursor;
-            cursor = c;
-
-            if (isStarted()) {
-                super.deliverResult(c);
-            }
-
-            if (old != null && old != c) {
-                old.close();
-            }
-        }
-
-        @Override
-        protected void onStartLoading() {
-            Log.d(TAG, "ChatDatabaseLoader onStartLoading");
-            if (cursor != null) {
-                // already have cursor
-                deliverResult(cursor);
-            }
-            if (takeContentChanged() || cursor == null) {
-                forceLoad();
-            }
-        }
-
-        @Override
-        protected void onStopLoading() {
-            cancelLoad();
-        }
     }
 }

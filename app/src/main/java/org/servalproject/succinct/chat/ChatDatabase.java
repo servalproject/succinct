@@ -5,11 +5,13 @@ import android.database.Cursor;
 import android.database.CursorWrapper;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.net.Uri;
 import android.os.Environment;
 import android.provider.BaseColumns;
 import android.support.annotation.IntDef;
 import android.util.Log;
 
+import org.servalproject.succinct.BuildConfig;
 import org.servalproject.succinct.team.TeamMember;
 
 import java.lang.annotation.Retention;
@@ -25,7 +27,9 @@ public class ChatDatabase extends SQLiteOpenHelper {
     private static final String TAG = "ChatDatabase";
     private static final String DATABASE_NAME = Environment.getExternalStorageDirectory() + "/succinct/chatlog.db"; // todo don't store on SD card?
     private static final int DATABASE_VERSION = 1;
+    public static final Uri URI_CHAT_DATA = Uri.parse("sqlite://" + BuildConfig.APPLICATION_ID + "/chatlog");
 
+    private static Context mContext;
     private static ChatDatabase instance;
 
     @IntDef({TYPE_MESSAGE, TYPE_JOIN, TYPE_PART})
@@ -114,6 +118,7 @@ public class ChatDatabase extends SQLiteOpenHelper {
 
     private ChatDatabase(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
+        mContext = context;
     }
 
     public static synchronized ChatDatabase getInstance (Context context) {
@@ -121,6 +126,10 @@ public class ChatDatabase extends SQLiteOpenHelper {
             instance = new ChatDatabase(context);
         }
         return instance;
+    }
+
+    private void notifyChange() {
+        mContext.getContentResolver().notifyChange(URI_CHAT_DATA, null);
     }
 
     @Override
