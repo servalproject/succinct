@@ -4,6 +4,7 @@ package org.servalproject.succinct;
 import android.app.LoaderManager;
 import android.content.Context;
 import android.content.Loader;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.app.Fragment;
 import android.support.annotation.Nullable;
@@ -21,7 +22,11 @@ import android.widget.EditText;
 import org.servalproject.succinct.chat.ChatAdapter;
 import org.servalproject.succinct.chat.ChatCursorLoader;
 import org.servalproject.succinct.chat.ChatDatabase;
+import org.servalproject.succinct.chat.ChatDatabase.ChatMessage;
 import org.servalproject.succinct.chat.ChatDatabase.ChatMessageCursor;
+import org.servalproject.succinct.team.TeamMember;
+
+import java.util.Date;
 
 
 public class ChatFragment extends Fragment implements LoaderManager.LoaderCallbacks<ChatMessageCursor> {
@@ -62,8 +67,30 @@ public class ChatFragment extends Fragment implements LoaderManager.LoaderCallba
         @Override
         public void onClick(View view) {
             Log.d(TAG, "send: "+ input.getText());
+            sendMessage(input.getText().toString());
+            input.setText("");
+            sendButton.setEnabled(false);
         }
     };
+
+    private void sendMessage(final String s) {
+        // todo new messages should probably get sent to the storage layer first?
+        new AsyncTask<String, Void, Void>() {
+            @Override
+            protected Void doInBackground(String... strings) {
+                ChatMessage msg = new ChatMessage();
+                msg.type = ChatDatabase.TYPE_MESSAGE;
+                msg.sender = TeamMember.myself().getName();
+                msg.senderId = TeamMember.myself().getId();
+                msg.message = s;
+                msg.time = new Date();
+                msg.isRead = true;
+                ChatDatabase db = ChatDatabase.getInstance(getActivity().getApplicationContext());
+                db.insert(msg);
+                return null;
+            }
+        }.execute(s);
+    }
 
     private TextWatcher inputTextWatcher = new TextWatcher() {
         @Override

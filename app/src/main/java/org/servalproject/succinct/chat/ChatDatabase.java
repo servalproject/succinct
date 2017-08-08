@@ -1,5 +1,6 @@
 package org.servalproject.succinct.chat;
 
+import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.CursorWrapper;
@@ -138,6 +139,34 @@ public class ChatDatabase extends SQLiteOpenHelper {
 
     private void notifyChange() {
         mContext.getContentResolver().notifyChange(URI_CHAT_DATA, null);
+    }
+
+    public void insert (ChatMessage msg) {
+        if (msg == null) return;
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        // fixme need better management of senders
+        if (msg.senderId <= 0 || msg.sender == null || msg.sender.isEmpty()) {
+            throw new IllegalArgumentException();
+        }
+        ContentValues v = new ContentValues();
+        v.put(SenderTable._ID, msg.senderId);
+        v.put(SenderTable.NAME, msg.sender);
+        Log.d(TAG, "insert sender: " + msg.sender + " (" + msg.senderId + ") [ignoring if present]");
+        db.insertWithOnConflict(SenderTable._TABLE_NAME, null, v, SQLiteDatabase.CONFLICT_IGNORE);
+        v.clear();
+        v.put(ChatMessageTable.SENDER, msg.senderId);
+        v.put(ChatMessageTable.MESSAGE, msg.message);
+        v.put(ChatMessageTable.TIME, msg.time.getTime());
+        v.put(ChatMessageTable.IS_READ, msg.isRead);
+        v.put(ChatMessageTable.TYPE, msg.type);
+        Log.d(TAG, "insert chat message: " + msg.message);
+        db.insert(ChatMessageTable._TABLE_NAME, null, v);
+        db.setTransactionSuccessful();
+        db.endTransaction();
+        db.close();
+
+        notifyChange();
     }
 
     @Override
