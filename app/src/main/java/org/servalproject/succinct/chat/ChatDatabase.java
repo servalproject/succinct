@@ -43,6 +43,7 @@ public class ChatDatabase extends SQLiteOpenHelper {
         public long id;
         @ChatMessageType
         public int type;
+        public int senderId;
         public String sender;
         public Date time;
         public String message;
@@ -50,15 +51,20 @@ public class ChatDatabase extends SQLiteOpenHelper {
         public boolean isFirstOnDay;
         public boolean sentByMe;
 
+        // fixme need to narrow down the ways this class is constructed
+        public ChatMessage() {}
+
         public ChatMessage(ChatMessageCursor c) {
+            // todo don't hard code
             id = c.getLong(0);
             //noinspection WrongConstant
             type = c.getInt(1);
-            sender = c.getString(2);
-            time = new Date(c.getLong(3));
-            message = c.getString(4);
-            isRead = (c.getInt(5) != 0);
-            sentByMe = (c.getInt(6) != 0);
+            senderId = c.getInt(2);
+            sender = c.getString(3);
+            time = new Date(c.getLong(4));
+            message = c.getString(5);
+            isRead = (c.getInt(6) != 0);
+            sentByMe = (c.getInt(7) != 0);
 
             // check if we should show the full date with this message
             // fixme manipulating the cursor works but is not a good approach
@@ -70,7 +76,7 @@ public class ChatDatabase extends SQLiteOpenHelper {
                 cal.setTime(time);
                 day = cal.get(Calendar.YEAR)*1000+cal.get(Calendar.DAY_OF_YEAR);
                 c.moveToPrevious();
-                cal.setTimeInMillis(c.getLong(3));
+                cal.setTimeInMillis(c.getLong(4));
                 prevDay = cal.get(Calendar.YEAR)*1000+cal.get(Calendar.DAY_OF_YEAR);
                 isFirstOnDay = (day != prevDay);
             }
@@ -78,8 +84,9 @@ public class ChatDatabase extends SQLiteOpenHelper {
     }
 
     public static class ChatMessageCursor extends CursorWrapper {
+        // todo set up all fields
         public static final int ID = 0;
-        public static final int SENT_BY_ME = 6;
+        public static final int SENT_BY_ME = 7;
         public ChatMessageCursor(Cursor c) {
             super(c);
         }
@@ -91,6 +98,7 @@ public class ChatDatabase extends SQLiteOpenHelper {
         final String SELECT_CHAT_MESSAGES = "SELECT "
                 + ChatMessageTable._TABLE_NAME + "." + ChatMessageTable._ID + ", "
                 + ChatMessageTable.TYPE + ", "
+                + ChatMessageTable.SENDER + ", "
                 + SenderTable.NAME + ", "
                 + ChatMessageTable.TIME + ", "
                 + ChatMessageTable.MESSAGE + ", "
