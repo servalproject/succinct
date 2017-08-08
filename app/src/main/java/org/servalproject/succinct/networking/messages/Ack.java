@@ -16,13 +16,13 @@ public class Ack extends Message {
 	public static final String TAG = "Ack";
 
 	Ack(ByteBuffer parseBuff) {
-		super(Type.LinkAck);
+		super(Type.AckMessage);
 		while(parseBuff.hasRemaining())
 			links.add(new LinkAck(parseBuff));
 	}
 
 	public Ack(){
-		super(Type.LinkAck);
+		super(Type.AckMessage);
 	}
 
 	public void add(Peer peer, PeerSocketLink link){
@@ -34,6 +34,10 @@ public class Ack extends Message {
 		for(LinkAck a : links)
 			a.write(buff);
 
+	}
+
+	@Override
+	public void process(Peer peer) {
 	}
 
 	public class LinkAck {

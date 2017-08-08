@@ -6,12 +6,15 @@ import android.os.HandlerThread;
 
 import org.servalproject.succinct.messaging.rock.RockMessaging;
 import org.servalproject.succinct.networking.Networks;
+import org.servalproject.succinct.storage.Storage;
 
 import java.net.SocketException;
 
 public class App extends Application {
 	public static Handler UIHandler;
 	private RockMessaging rock;
+	public Storage teamStorage;
+	public Networks networks;
 
 	// a single background thread for short work tasks
 	public static Handler backgroundHandler;
@@ -36,7 +39,9 @@ public class App extends Application {
 		backgroundHandler = new Handler(backgroundThread.getLooper());
 
 		try {
-			Networks.init(this);
+			// for now there is one team, and you are in it.
+			teamStorage = new Storage(this, "team");
+			networks = Networks.init(this);
 		} catch (java.io.IOException e) {
 			throw new IllegalStateException("");
 		}

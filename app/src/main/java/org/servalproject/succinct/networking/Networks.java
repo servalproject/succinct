@@ -7,7 +7,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.location.Location;
 import android.os.Build;
 import android.os.PowerManager;
 import android.os.SystemClock;
@@ -17,6 +16,7 @@ import org.servalproject.succinct.App;
 import org.servalproject.succinct.networking.messages.Ack;
 import org.servalproject.succinct.networking.messages.Header;
 import org.servalproject.succinct.networking.messages.Message;
+import org.servalproject.succinct.networking.messages.StoreState;
 
 import java.io.File;
 import java.io.IOException;
@@ -38,7 +38,7 @@ public class Networks {
 	private static final String TAG = "Networks";
 	private static final int MTU = 1400;
 
-	private final Context context;
+	private final App appContext;
 	private final DatagramChannel dgram;
 	private final AlarmManager am;
 	private final PowerManager.WakeLock wakeLock;
@@ -56,7 +56,7 @@ public class Networks {
 		return instance;
 	}
 
-	public static void init(Context context) throws IOException {
+	public static Networks init(App appContext) throws IOException {
 		if (instance != null)
 			throw new IllegalStateException("Already created");
 
@@ -66,12 +66,12 @@ public class Networks {
 		dgram.socket().bind(new InetSocketAddress(PORT));
 		dgram.socket().setBroadcast(true);
 
-		instance = new Networks(context, dgram);
+		return instance = new Networks(appContext, dgram);
 	}
 
-	private Networks(Context context, DatagramChannel dgramChannel){
+	private Networks(App context, DatagramChannel dgramChannel){
 		this.dgram = dgramChannel;
-		this.context = context;
+		this.appContext = context;
 		// TODO store our id in prefs?
 		myId = new PeerId();
 		am = (AlarmManager)context.getSystemService(Context.ALARM_SERVICE);
@@ -168,8 +168,7 @@ public class Networks {
 			peer = new Peer(hdr.id);
 			peers.put(hdr.id, peer);
 			Log.v(TAG, "New peer");
-			cancelAlarm();
-			setAlarm(100);
+			setAlarm(10);
 		}
 
 		PeerSocketLink link = (PeerSocketLink) peer.networkLinks.get(addr);
@@ -189,11 +188,10 @@ public class Networks {
 			if (msg == null)
 				break;
 
-			switch (msg.type){
-				case LinkAck:
-					processAck(peer, link, (Ack)msg);
-					break;
-			}
+			if (msg.type == Message.Type.AckMessage)
+				processAck(peer, link, (Ack)msg);
+			else
+				msg.process(peer);
 		}
 	}
 
@@ -211,10 +209,18 @@ public class Networks {
 
 	private PendingIntent alarmIntent=null;
 	private AlarmManager.OnAlarmListener listener=null;
-	private void setAlarm(int delay){
-		if (!backgroundEnabled)
+	private long nextAlarm=-1;
+	public void setAlarm(int delay){
+		if (networks.isEmpty() || !backgroundEnabled)
 			return;
 
+		long newAlarm = SystemClock.elapsedRealtime()+delay;
+		// Don't delay an alarm that has already been set
+		if (nextAlarm!=-1 && newAlarm > nextAlarm)
+			return;
+
+		cancelAlarm();
+		nextAlarm = newAlarm;
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
 			if (listener == null){
 				listener = new AlarmManager.OnAlarmListener() {
@@ -226,29 +232,30 @@ public class Networks {
 				};
 			}
 			am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP,
-					SystemClock.elapsedRealtime()+delay,
+					newAlarm,
 					"Heartbeat",
 					listener,
 					App.backgroundHandler);
 		}else{
 			alarmIntent = PendingIntent.getBroadcast(
-					context,
+					appContext,
 					0,
 					new Intent(ALARM_ACTION),
 					PendingIntent.FLAG_UPDATE_CURRENT);
 			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
 				am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP,
-						SystemClock.elapsedRealtime()+delay,
+						newAlarm,
 						alarmIntent);
 			}else{
 				am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
-						SystemClock.elapsedRealtime()+delay,
+						newAlarm,
 						alarmIntent);
 			}
 		}
 	}
 
 	private void cancelAlarm(){
+		nextAlarm = -1;
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
 			if (listener!=null)
 				am.cancel(listener);
@@ -271,8 +278,8 @@ public class Networks {
 
 			networks.add(network);
 
-			cancelAlarm();
-			setAlarm(100);
+			// wait a little while for the kernel to finish bringing the interface up
+			setAlarm(10);
 		} catch (UnknownHostException e) {
 			Log.e(TAG, e.getMessage(), e);
 		}
@@ -333,6 +340,7 @@ public class Networks {
 	}
 
 	public void onAlarm() {
+		nextAlarm = -1;
 		if (backgroundEnabled && !networks.isEmpty()) {
 			trimDead();
 
@@ -352,6 +360,12 @@ public class Networks {
 			}
 			if (!ack.links.isEmpty())
 				ack.write(buff);
+
+			StoreState state = null;
+			if (appContext.teamStorage != null)
+				state = appContext.teamStorage.getState();
+			if (state != null)
+				state.write(buff);
 
 			buff.flip();
 			for (IPInterface i : networks) {
@@ -377,6 +391,9 @@ public class Networks {
 				ack = new Ack();
 				ack.add(p, link);
 				ack.write(buff);
+				if (state != null)
+					state.write(buff);
+
 				buff.flip();
 
 				Log.v(TAG, "Sending unicast heartbeat ["+dump(buff)+"] to " + link.addr);

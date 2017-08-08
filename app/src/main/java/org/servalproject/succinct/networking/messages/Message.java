@@ -1,8 +1,6 @@
 package org.servalproject.succinct.networking.messages;
 
-import android.util.Log;
-
-import org.servalproject.succinct.networking.Networks;
+import org.servalproject.succinct.networking.Peer;
 
 import java.nio.ByteBuffer;
 
@@ -14,8 +12,10 @@ public abstract class Message {
 	}
 
 	public enum Type{
-		DGramHeader,
-		LinkAck,
+		HeaderMessage,
+		AckMessage,
+		StoreStateMessage,
+		SyncKeyMessage
 	}
 
 	public static Message parseMessage(ByteBuffer buff){
@@ -35,10 +35,14 @@ public abstract class Message {
 		buff.limit(limit);
 
 		switch (type){
-			case DGramHeader:
+			case HeaderMessage:
 				return new Header(parseBuff);
-			case LinkAck:
+			case AckMessage:
 				return new Ack(parseBuff);
+			case StoreStateMessage:
+				return new StoreState(parseBuff);
+			case SyncKeyMessage:
+				return new SyncKey(parseBuff);
 		}
 
 		throw new IllegalStateException("Unexpected type!");
@@ -60,4 +64,6 @@ public abstract class Message {
 	}
 
 	protected abstract void serialise(ByteBuffer buff);
+
+	public abstract void process(Peer peer);
 }

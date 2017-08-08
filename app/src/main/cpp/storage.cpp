@@ -5,6 +5,7 @@
 #include "lmdb/lmdb.h"
 #include "hash.h"
 #include "storage.h"
+#include "sync_keys.h"
 
 #define LOGIF(X, ...) __android_log_print(ANDROID_LOG_INFO, "StorageJNI", X, ##__VA_ARGS__)
 
@@ -30,16 +31,21 @@ struct file_data{
 #define PERSIST_LEN (offsetof(struct file_data, name))
 
 struct dbstate{
+    jobject storage;
     MDB_env *env;
     MDB_dbi files;
     MDB_dbi index;
     uint8_t root_hash[crypto_hash_sha256_BYTES];
+    struct sync_state *sync_state;
 };
 
 static jmethodID jni_file_callback;
+static jmethodID jni_store_callback;
 
 static void close_db(struct dbstate *state){
     LOGIF("close_db");
+    if (state->sync_state)
+        sync_free_state(state->sync_state);
     if (state->files)
         mdb_dbi_close(state->env, state->files);
     if (state->index)
@@ -89,6 +95,38 @@ static int open_db(struct dbstate *state, const char *path){
 error:
     close_db(state);
     return -1;
+}
+
+static void has_callback(void *context, void *peer_context, const sync_key_t *key){
+
+}
+static void does_not_have_callback(void *context, void *peer_context, void *key_context, const sync_key_t *key){
+
+}
+static void now_has_callback(void *context, void *peer_context, void *key_context, const sync_key_t *key){
+
+}
+
+static void init_sync_state(struct dbstate *state, MDB_txn *txn){
+    if (state->sync_state)
+        return;
+
+    state->sync_state = sync_alloc_state(NULL, has_callback, does_not_have_callback, now_has_callback);
+
+    // add the current hash of every file
+    MDB_cursor *curs;
+    mdb_cursor_open(txn, state->files, &curs);
+    MDB_val key;
+    MDB_val val;
+    if (mdb_cursor_get(curs, &key, &val, MDB_FIRST)==0){
+        do {
+            if (val.mv_size == PERSIST_LEN) {
+                struct file_data *data = (file_data *) val.mv_data;
+                sync_add_key(state->sync_state, (sync_key_t*)data->hash, NULL);
+            }
+        }while(mdb_cursor_get(curs, &key, &val, MDB_NEXT)==0);
+    }
+    mdb_cursor_close(curs);
 }
 
 static struct file_data *file_open(struct dbstate *state, const char *name){
@@ -150,6 +188,9 @@ static int file_flush(struct dbstate *state, struct file_data *file){
     struct file_version new_version;
     uint8_t old_hash[crypto_hash_sha256_BYTES];
 
+    if (file->length == file->new_length)
+        return 0;
+
     file->version++;
     file->length = file->new_length;
     file->partial_hash = file->new_hash;
@@ -176,9 +217,9 @@ static int file_flush(struct dbstate *state, struct file_data *file){
         goto error;
 
     // TODO purge really old index records?
-    
+
     key.mv_data = (void *)file->hash;
-    key.mv_size = sizeof file->hash;
+    key.mv_size = sizeof sync_key_t;
     val.mv_data = &new_version;
     val.mv_size = sizeof new_version;
 
@@ -200,13 +241,25 @@ static int file_flush(struct dbstate *state, struct file_data *file){
     if (mdb_txn_commit(txn) !=0)
         goto error;
 
+    if (state->sync_state) {
+        // TODO remove sync keys?
+        sync_add_key(state->sync_state, (sync_key_t *) file->hash, NULL);
+    }
+
     memcpy(state->root_hash, old_hash, sizeof old_hash);
+
     LOGIF("flushed file %s, len %d", file->name, (int)file->length);
-    return 0;
+    return 1;
 
 error:
     mdb_txn_abort(txn);
     return -1;
+}
+
+static void storage_callback(JNIEnv *env, struct dbstate *state){
+    jbyteArray root = env->NewByteArray(sizeof state->root_hash);
+    env->SetByteArrayRegion(root, 0, sizeof state->root_hash, (const jbyte *) state->root_hash);
+    env->CallVoidMethod(state->storage, jni_store_callback, root);
 }
 
 static jlong JNICALL jni_storage_open(JNIEnv *env, jobject object, jstring path)
@@ -214,6 +267,7 @@ static jlong JNICALL jni_storage_open(JNIEnv *env, jobject object, jstring path)
     struct dbstate *state = (struct dbstate*)malloc(sizeof(struct dbstate));
     memset(state, 0, sizeof *state);
 
+    state->storage = env->NewGlobalRef(object);
     const char *filename = env->GetStringUTFChars(path, NULL);
     int r = open_db(state, filename);
     if (r){
@@ -221,12 +275,14 @@ static jlong JNICALL jni_storage_open(JNIEnv *env, jobject object, jstring path)
         state = NULL;
     }
     env->ReleaseStringUTFChars(path, filename);
+    storage_callback(env, state);
     return (jlong)state;
 }
 
 static void JNICALL jni_storage_close(JNIEnv *env, jobject object, jlong ptr)
 {
     struct dbstate *state = (struct dbstate *)ptr;
+    env->DeleteGlobalRef(state->storage);
     close_db(state);
 }
 
@@ -259,7 +315,10 @@ static jint JNICALL jni_file_flush(JNIEnv *env, jobject object, jlong store_ptr,
     struct dbstate *state = (struct dbstate *)store_ptr;
     struct file_data *file = (file_data *) file_ptr;
     int ret = file_flush(state, file);
-    env->CallVoidMethod(object, jni_file_callback, (jlong)file->length);
+    if (ret==1){
+        env->CallVoidMethod(object, jni_file_callback, (jlong)file->length);
+        storage_callback(env, state);
+    }
     return (jint)ret;
 }
 
@@ -282,6 +341,9 @@ int jni_register_storage(JNIEnv* env){
     if (env->ExceptionCheck())
         return -1;
 
+    jni_store_callback = env->GetMethodID(store, "jniCallback", "([B)V");
+    if (env->ExceptionCheck())
+        return -1;
     env->RegisterNatives(store, storage_methods, NELS(storage_methods));
     if (env->ExceptionCheck())
         return -1;
