@@ -123,6 +123,30 @@ public class MapLocationLayer extends Layer {
         addToLayers(map.getLayerManager().getLayers());
     }
 
+    public synchronized void setLocation(Location location) {
+        // todo we might want to turn off the location marker with setLocation(null)?
+        if (location == null) return;
+        lastLocation = location;
+        lastLatLong = new LatLong(location.getLatitude(), location.getLongitude());
+        radius.setLatLong(lastLatLong);
+        me.setLatLong(lastLatLong);
+
+        float accuracy = location.getAccuracy();
+        if (accuracy == 0) accuracy = 40;
+        radius.setRadius(accuracy);
+
+        locationValid = true;
+
+        if (waitingToCenter || alwaysCenter) {
+            mapViewPosition.setCenter(lastLatLong);
+            waitingToCenter = false;
+        }
+
+        if (haveDisplayModel) {
+            requestRedraw();
+        }
+    }
+
     @Override
     public synchronized void draw(BoundingBox boundingBox, byte zoomLevel, Canvas canvas, Point topLeftPoint) {
         if (haveDisplayModel && locationValid) {
@@ -164,27 +188,7 @@ public class MapLocationLayer extends Layer {
         public void onNewLocation(Location location) {
             Log.d(TAG, "onNewLocation " + location);
             if (location == null) return;
-            synchronized (MapLocationLayer.this) {
-                lastLocation = location;
-                lastLatLong = new LatLong(location.getLatitude(), location.getLongitude());
-                radius.setLatLong(lastLatLong);
-                me.setLatLong(lastLatLong);
-
-                float accuracy = location.getAccuracy();
-                if (accuracy == 0) accuracy = 40;
-                radius.setRadius(accuracy);
-
-                locationValid = true;
-
-                if (waitingToCenter || alwaysCenter) {
-                    mapViewPosition.setCenter(lastLatLong);
-                    waitingToCenter = false;
-                }
-
-                if (haveDisplayModel) {
-                    requestRedraw();
-                }
-            }
+            setLocation(location);
         }
     };
 }
