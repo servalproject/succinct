@@ -101,6 +101,7 @@ public class LocationService extends Service {
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 gpsEnabled = true;
             }
+            // fixme need to discard last known location if stale (for some value of stale)
             lastLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
             Log.d(TAG, "getLastKnownLocation (GPS) " + lastLocation);
             Log.d(TAG, "onCreate registering for GPS updates every " + minTime + " ms, or " + minDistance + " m");

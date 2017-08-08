@@ -21,6 +21,7 @@ import org.mapsforge.map.layer.cache.TileCache;
 import org.mapsforge.map.layer.renderer.TileRendererLayer;
 import org.mapsforge.map.reader.MapFile;
 import org.mapsforge.map.rendertheme.InternalRenderTheme;
+import org.servalproject.succinct.location.LocationService;
 import org.servalproject.succinct.location.MapLocationLayer;
 
 import java.io.File;
@@ -81,7 +82,11 @@ public class MapFragment extends Fragment {
             MapLocationLayer mapLocationLayer = new MapLocationLayer(bitmap);
             mapLocationLayer.addToMap(map);
             mapLocationLayer.center(map, true);
-            mapLocationLayer.activate(getActivity());
+            LocationService locationService = mainActivity.getLocationService();
+            if (locationService != null) {
+                mapLocationLayer.setLocation(locationService.getLastLocation());
+            }
+            mapLocationLayer.activate(mainActivity);
         }
         return view;
     }
