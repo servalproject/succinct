@@ -1,10 +1,7 @@
 package org.servalproject.succinct.chat;
 
 import android.database.Cursor;
-import android.graphics.drawable.GradientDrawable;
-import android.provider.BaseColumns;
 import android.support.annotation.IntDef;
-import android.support.v4.content.ContextCompat;
 import android.support.v7.widget.RecyclerView;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -19,8 +16,6 @@ import org.servalproject.succinct.chat.ChatDatabase.ChatMessageCursor;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.text.DateFormat;
-import java.util.InputMismatchException;
-import java.util.List;
 
 /**
  * Created by kieran on 1/08/17.
@@ -128,19 +123,26 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
         recycler.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(final RecyclerView v, int dx, int dy) {
-                super.onScrolled(v, dx, dy);
                 boolean canScrollDown = v.canScrollVertically(1);
                 if (atBottom && dx == 0 && dy == 0 && canScrollDown) {
-                    // layout changed, need to scroll
-                    v.postDelayed(new Runnable() {
-                        @Override
-                        public void run() {
-                            v.scrollToPosition(getItemCount() - 1);
-                        }
-                    }, 100);
-                } else {
-                    atBottom = !canScrollDown;
+                    // layout change will be handled by OnLayoutChangeListener
+                    return;
                 }
+                atBottom = !canScrollDown;
+            }
+        });
+        recycler.addOnLayoutChangeListener(new RecyclerView.OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(final View v, int left, int top, int right, int bottom,
+                                       int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                boolean canScrollDown = v.canScrollVertically(1);
+                if (!atBottom || !canScrollDown) return;
+                v.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        ((RecyclerView) v).scrollToPosition(getItemCount() - 1);
+                    }
+                }, 100);
             }
         });
     }
