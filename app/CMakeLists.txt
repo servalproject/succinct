@@ -26,7 +26,7 @@ add_library( # Sets the name of the library.
              src/main/cpp/storage.h
              src/main/cpp/storage.cpp
              src/main/cpp/sync_keys.h
-             src/main/cpp/sync_keys.c
+             src/main/cpp/sync_keys.cpp
              src/main/cpp/lmdb/mdb.c
              src/main/cpp/lmdb/midl.c
              src/main/cpp/lmdb/midl.h

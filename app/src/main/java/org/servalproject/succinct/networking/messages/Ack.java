@@ -30,10 +30,12 @@ public class Ack extends Message {
 	}
 
 	@Override
-	protected void serialise(ByteBuffer buff) {
-		for(LinkAck a : links)
-			a.write(buff);
-
+	protected boolean serialise(ByteBuffer buff) {
+		if (links.isEmpty())
+			return false;
+		for(LinkAck linkAck :links)
+			linkAck.write(buff);
+		return true;
 	}
 
 	@Override
@@ -59,7 +61,9 @@ public class Ack extends Message {
 			this.unicast = unicast;
 		}
 
-		private void write(ByteBuffer buff) {
+		private boolean write(ByteBuffer buff) {
+			if (buff.remaining()<PeerId.LEN+1)
+				return false;
 			id.write(buff);
 			byte flags =0;
 			if (broadcast)
@@ -67,6 +71,7 @@ public class Ack extends Message {
 			if (unicast)
 				flags |= 1;
 			buff.put(flags);
+			return true;
 		}
 	}
 }

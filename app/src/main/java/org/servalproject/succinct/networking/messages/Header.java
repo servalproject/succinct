@@ -22,9 +22,10 @@ public class Header extends Message{
 	}
 
 	@Override
-	protected void serialise(ByteBuffer buff) {
+	protected boolean serialise(ByteBuffer buff) {
 		id.write(buff);
 		buff.put((byte)(unicast?1:0));
+		return true;
 	}
 
 	@Override

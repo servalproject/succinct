@@ -6,14 +6,21 @@
 #include "hash.h"
 #include "storage.h"
 #include "sync_keys.h"
+#include "native-lib.h"
 
 #define LOGIF(X, ...) __android_log_print(ANDROID_LOG_INFO, "StorageJNI", X, ##__VA_ARGS__)
 
 // current snapshot
 #define MAX_NAME (256)
 
+#define SYNC_MSG_KEY 0
+#define SYNC_MSG_REQ_METADATA 1
+#define SYNC_MSG_SEND_METADATA 2
+
+
 struct file_version{
-    uint32_t version; // version
+    uint32_t version;
+    uint64_t length;
     char name[MAX_NAME]; // relative path
 };
 
@@ -41,6 +48,8 @@ struct dbstate{
 
 static jmethodID jni_file_callback;
 static jmethodID jni_store_callback;
+static jmethodID jni_sync_message;
+static jmethodID jni_peer_has;
 
 static void close_db(struct dbstate *state){
     LOGIF("close_db");
@@ -97,21 +106,138 @@ error:
     return -1;
 }
 
-static void has_callback(void *context, void *peer_context, const sync_key_t *key){
-
+static int send_message(JNIEnv* env, jobject object, uint8_t type, const uint8_t *data, size_t len){
+    if (!env){
+        if (java_vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK)
+            return -1;
+    }
+    LOGIF("Queue sync message %d", type);
+    jbyteArray argument = env->NewByteArray(len+1);
+    env->SetByteArrayRegion(argument, 0, 1, (const jbyte *) &type);
+    env->SetByteArrayRegion(argument, 1, len, (const jbyte *) data);
+    env->CallVoidMethod(object, jni_sync_message, argument);
+    env->DeleteLocalRef(argument);
+    return 0;
 }
+
+static int process_difference(struct dbstate *state, jobject peer, const sync_key_t *sync_key){
+    // do we already know what this hash refers to?
+    JNIEnv* env;
+    if (java_vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK)
+        return -1;
+
+    MDB_txn *txn;
+    if (mdb_txn_begin(state->env, NULL, MDB_RDONLY, &txn)!=0)
+        return -1;
+
+    MDB_val key;
+    MDB_val val;
+
+    key.mv_data = (void *)sync_key;
+    key.mv_size = sizeof(sync_key_t);
+
+    int r = mdb_get(txn, state->files, &key, &val);
+    if (r == MDB_NOTFOUND){
+        send_message(env, peer, SYNC_MSG_REQ_METADATA, (const uint8_t *) sync_key, sizeof(sync_key_t));
+    }else if(r==0){
+        const struct file_version *peer_version = (const file_version *) val.mv_data;
+
+        // we could compare their version to ours here,
+        // but it's likely that we'll need to call file_open anyway, or have already done so.
+
+        jstring filename = env->NewStringUTF(peer_version->name);
+        env->CallVoidMethod(peer, jni_peer_has, filename, peer_version->length);
+        env->DeleteLocalRef(filename);
+    }
+    mdb_txn_abort(txn);
+    return 0;
+}
+
+static void send_metadata(JNIEnv* env, struct dbstate *state, jobject peer, const sync_key_t *sync_key){
+    MDB_txn *txn;
+    if (mdb_txn_begin(state->env, NULL, MDB_RDONLY, &txn)!=0)
+        return;
+
+    MDB_val key;
+    MDB_val val;
+
+    key.mv_data = (void *)sync_key;
+    key.mv_size = sizeof(sync_key_t);
+
+    int r = mdb_get(txn, state->files, &key, &val);
+    if (r==0){
+        const struct file_version *peer_version = (const file_version *) val.mv_data;
+        jbyteArray argument = env->NewByteArray(sizeof(sync_key_t)+sizeof(struct file_version)+1);
+        uint8_t type = SYNC_MSG_SEND_METADATA;
+        LOGIF("Queue sync message %d", type);
+        env->SetByteArrayRegion(argument, 0, 1, (const jbyte *) &type);
+        env->SetByteArrayRegion(argument, 1, sizeof(sync_key_t), (const jbyte *) sync_key);
+        env->SetByteArrayRegion(argument, 1+sizeof(sync_key_t), sizeof(struct file_version), (const jbyte *) peer_version);
+        env->CallVoidMethod(peer, jni_sync_message, argument);
+        env->DeleteLocalRef(argument);
+    }
+    mdb_txn_abort(txn);
+}
+
+static void receive_metadata(JNIEnv* env, struct dbstate *state, jobject peer, const uint8_t *msg, size_t len){
+    if (len != sizeof(sync_key_t) + sizeof(struct file_version))
+        return;
+
+    const sync_key_t *sync_key = (const sync_key_t *) msg;
+    const struct file_version *peer_version = (const file_version *) (msg + sizeof(sync_key_t));
+
+    MDB_txn *txn;
+    if (mdb_txn_begin(state->env, NULL, 0, &txn)!=0)
+        return;
+
+    MDB_val key;
+    MDB_val val;
+
+    key.mv_data = (void *)sync_key;
+    key.mv_size = sizeof(sync_key_t);
+    val.mv_data = (void *) peer_version;
+    val.mv_size = sizeof(struct file_version);
+
+    if (mdb_put(txn, state->index, &key, &val, 0)!=0)
+        goto error;
+    if (mdb_txn_commit(txn)!=0)
+        goto error;
+
+    {
+        jstring filename = env->NewStringUTF(peer_version->name);
+        env->CallVoidMethod(peer, jni_peer_has, filename, peer_version->length);
+        env->DeleteLocalRef(filename);
+    }
+    
+error:
+    mdb_txn_abort(txn);
+}
+
+static void has_callback(void *context, void *peer_context, const sync_key_t *sync_key) {
+    process_difference((dbstate *) context, (jobject) peer_context, sync_key);
+}
+
 static void does_not_have_callback(void *context, void *peer_context, void *key_context, const sync_key_t *key){
-
-}
-static void now_has_callback(void *context, void *peer_context, void *key_context, const sync_key_t *key){
-
+    struct dbstate *state = (dbstate *) context;
 }
 
-static void init_sync_state(struct dbstate *state, MDB_txn *txn){
+static void now_has_callback(void *context, void *peer_context, void *key_context, const sync_key_t *sync_key){
+    process_difference((dbstate *) context, (jobject) peer_context, sync_key);
+}
+
+static void queue_message(void *context, void *peer_context, const uint8_t *buff, size_t len){
+    send_message(NULL, (jobject)peer_context, SYNC_MSG_KEY, buff, len);
+}
+
+static void init_sync_state(struct dbstate *state){
     if (state->sync_state)
         return;
 
-    state->sync_state = sync_alloc_state(NULL, has_callback, does_not_have_callback, now_has_callback);
+    MDB_txn *txn;
+    if (mdb_txn_begin(state->env, NULL, MDB_RDONLY, &txn)!=0)
+        return;
+
+    state->sync_state = sync_alloc_state(state, has_callback, does_not_have_callback, now_has_callback, queue_message);
 
     // add the current hash of every file
     MDB_cursor *curs;
@@ -127,6 +253,7 @@ static void init_sync_state(struct dbstate *state, MDB_txn *txn){
         }while(mdb_cursor_get(curs, &key, &val, MDB_NEXT)==0);
     }
     mdb_cursor_close(curs);
+    mdb_txn_abort(txn);
 }
 
 static struct file_data *file_open(struct dbstate *state, const char *name){
@@ -159,7 +286,7 @@ static struct file_data *file_open(struct dbstate *state, const char *name){
 
     // sanity check...
     if (r != MDB_NOTFOUND && val.mv_size != PERSIST_LEN){
-        LOGIF("WRONG LENGTH! (%d vs %d)", (int)val.mv_size, PERSIST_LEN);
+        LOGIF("WRONG LENGTH! (%d vs %d)", (int)val.mv_size, (int)PERSIST_LEN);
         r = MDB_NOTFOUND;
     }
 
@@ -204,6 +331,7 @@ static int file_flush(struct dbstate *state, struct file_data *file){
 
     strcpy(new_version.name, file->name);
     new_version.version = file->version;
+    new_version.length = file->length;
 
     if (mdb_txn_begin(state->env, NULL, 0, &txn)!=0)
         return -1;
@@ -219,7 +347,7 @@ static int file_flush(struct dbstate *state, struct file_data *file){
     // TODO purge really old index records?
 
     key.mv_data = (void *)file->hash;
-    key.mv_size = sizeof sync_key_t;
+    key.mv_size = sizeof(sync_key_t);
     val.mv_data = &new_version;
     val.mv_size = sizeof new_version;
 
@@ -260,6 +388,7 @@ static void storage_callback(JNIEnv *env, struct dbstate *state){
     jbyteArray root = env->NewByteArray(sizeof state->root_hash);
     env->SetByteArrayRegion(root, 0, sizeof state->root_hash, (const jbyte *) state->root_hash);
     env->CallVoidMethod(state->storage, jni_store_callback, root);
+    env->DeleteLocalRef(root);
 }
 
 static jlong JNICALL jni_storage_open(JNIEnv *env, jobject object, jstring path)
@@ -322,6 +451,55 @@ static jint JNICALL jni_file_flush(JNIEnv *env, jobject object, jlong store_ptr,
     return (jint)ret;
 }
 
+static jlong JNICALL jni_peer_message(JNIEnv *env, jobject object, jlong store_ptr, jlong sync_state, jbyteArray message){
+    struct dbstate *state = (struct dbstate *)store_ptr;
+    struct sync_peer_state *peer_state = (sync_peer_state *) sync_state;
+
+    if (message){
+        if (!state->sync_state)
+            init_sync_state(state);
+        if (!peer_state)
+            peer_state = sync_alloc_peer_state(state->sync_state, env->NewGlobalRef(object));
+
+        jsize len = env->GetArrayLength(message);
+        uint8_t msg[len];
+        env->GetByteArrayRegion(message, 0, len, (jbyte *) msg);
+
+        LOGIF("Processing sync message %d", msg[0]);
+
+        switch(msg[0]){
+            case SYNC_MSG_KEY:
+                sync_recv_message(state->sync_state, peer_state, msg+1, (size_t) len -1);
+                break;
+            case SYNC_MSG_REQ_METADATA:
+                send_metadata(env, state, object, (const sync_key_t *) msg+1);
+                break;
+            case SYNC_MSG_SEND_METADATA:
+                receive_metadata(env, state, object, msg+1, (size_t)len -1);
+                break;
+            default:
+                // unknown message type...
+                break;
+        }
+
+    }else if(peer_state){
+        void *context = sync_free_peer_state(state->sync_state, peer_state);
+        env->DeleteGlobalRef((jobject) context);
+        peer_state = NULL;
+    }
+    return (jlong)peer_state;
+}
+
+static void jni_queue_root_message(JNIEnv *env, jobject peer, jlong store_ptr){
+    struct dbstate *state = (struct dbstate *)store_ptr;
+    if (!state->sync_state)
+        init_sync_state(state);
+
+    uint8_t msg_buff[64];
+    size_t len = sync_root_msg(state->sync_state, msg_buff, sizeof msg_buff);
+    send_message(env, peer, SYNC_MSG_KEY, msg_buff, len);
+}
+
 #define NELS(X) (sizeof(X) / sizeof(X[0]))
 
 static JNINativeMethod storage_methods[] = {
@@ -336,12 +514,17 @@ static JNINativeMethod file_methods[] = {
         {"close", "(J)V", (void*)jni_file_close },
 };
 
+static JNINativeMethod peer_methods[] = {
+        {"processSyncMessage", "(JI[B)V", (void*)jni_peer_message },
+        {"queueRootMessage", "(J)V", (void*)jni_queue_root_message }
+};
+
 int jni_register_storage(JNIEnv* env){
     jclass store = env->FindClass("org/servalproject/succinct/storage/Storage");
     if (env->ExceptionCheck())
         return -1;
 
-    jni_store_callback = env->GetMethodID(store, "jniCallback", "([B)V");
+    jni_store_callback = env->GetMethodID(store, "jniCallback", "([B[B)V");
     if (env->ExceptionCheck())
         return -1;
     env->RegisterNatives(store, storage_methods, NELS(storage_methods));
@@ -357,6 +540,20 @@ int jni_register_storage(JNIEnv* env){
     env->RegisterNatives(file, file_methods, NELS(file_methods));
     if (env->ExceptionCheck())
         return -1;
+
+    jclass peer = env->FindClass("org/servalproject/succinct/networking/Peer");
+    if (env->ExceptionCheck())
+        return -1;
+    jni_sync_message = env->GetMethodID(peer, "syncMessage", "([B)V");
+    if (env->ExceptionCheck())
+        return -1;
+    jni_peer_has = env->GetMethodID(peer, "peerHas", "(Ljava/lang/String;J)V");
+    if (env->ExceptionCheck())
+        return -1;
+    env->RegisterNatives(peer, peer_methods, NELS(peer_methods));
+    if (env->ExceptionCheck())
+        return -1;
+
     return 0;
 }
 

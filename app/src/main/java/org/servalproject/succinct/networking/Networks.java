@@ -25,6 +25,11 @@ import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
+import java.nio.channels.SelectableChannel;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -42,7 +47,8 @@ public class Networks {
 	private final DatagramChannel dgram;
 	private final AlarmManager am;
 	private final PowerManager.WakeLock wakeLock;
-	private final PeerId myId;
+	public final PeerId myId;
+	private final NioLoop nioLoop;
 
 	public final Set<IPInterface> networks = new HashSet<>();
 	private final Map<PeerId, Peer> peers = new HashMap<>();
@@ -60,18 +66,55 @@ public class Networks {
 		if (instance != null)
 			throw new IllegalStateException("Already created");
 
-		DatagramChannel dgram = DatagramChannel.open();
-		dgram.configureBlocking(true);
-
-		dgram.socket().bind(new InetSocketAddress(PORT));
-		dgram.socket().setBroadcast(true);
-
-		return instance = new Networks(appContext, dgram);
+		return instance = new Networks(appContext);
 	}
 
-	private Networks(App context, DatagramChannel dgramChannel){
-		this.dgram = dgramChannel;
+	private Networks(App context) throws IOException {
 		this.appContext = context;
+		this.nioLoop = new NioLoop();
+
+		InetSocketAddress addr = new InetSocketAddress(PORT);
+
+		this.dgram = DatagramChannel.open();
+		dgram.socket().bind(addr);
+		dgram.socket().setBroadcast(true);
+		NioHandler<DatagramChannel> dgramHandler = new NioHandler<DatagramChannel>(dgram){
+			ByteBuffer buff = ByteBuffer.allocate(MTU);
+			@Override
+			public void read() throws IOException{
+				buff.clear();
+				InetSocketAddress addr = (InetSocketAddress)dgram.receive(buff);
+				buff.flip();
+
+				// TODO protocol versioning by source port?
+				if (addr.getPort()!=PORT)
+					return;
+
+				IPInterface receiveInterface=null;
+				for(IPInterface i : networks){
+					if (i.isInSubnet(addr.getAddress())) {
+						receiveInterface = i;
+						break;
+					}
+				}
+
+				process(receiveInterface, addr, buff);
+			}
+		};
+		nioLoop.register(SelectionKey.OP_READ, dgramHandler);
+
+		ServerSocketChannel channel = ServerSocketChannel.open();
+		channel.socket().bind(addr);
+		NioHandler<ServerSocketChannel> acceptHandler = new NioHandler<ServerSocketChannel>(channel) {
+			@Override
+			public void accept(NioLoop loop) throws IOException {
+				SocketChannel client = channel.accept();
+				PeerConnection connection = new PeerConnection(Networks.this, client);
+				loop.register(connection.getInterest(), connection);
+			}
+		};
+		nioLoop.register(SelectionKey.OP_ACCEPT, acceptHandler);
+
 		// TODO store our id in prefs?
 		myId = new PeerId();
 		am = (AlarmManager)context.getSystemService(Context.ALARM_SERVICE);
@@ -96,36 +139,8 @@ public class Networks {
 			}, f);
 		}
 
-		new Thread(new Runnable() {
-			@Override
-			public void run() {
-				// TODO Use a selector to monitor multiple channels in one thread?
-				// Or pass the file descriptor to jni so we can easily hook into the looper?
-				ByteBuffer buff = ByteBuffer.allocate(MTU);
-				while(true){
-					try {
-						buff.clear();
-						InetSocketAddress addr = (InetSocketAddress)dgram.receive(buff);
-						buff.flip();
+		new Thread(nioLoop, "Networking").start();
 
-						// TODO protocol versioning by source port?
-						if (addr.getPort()!=PORT)
-							continue;
-						IPInterface receiveInterface=null;
-						for(IPInterface i : networks){
-							if (i.isInSubnet(addr.getAddress())) {
-								receiveInterface = i;
-								break;
-							}
-						}
-
-						process(receiveInterface, addr, buff);
-					} catch (IOException e) {
-						Log.e(TAG, e.getMessage(), e);
-					}
-				}
-			}
-		}, "Networking").start();
 		App.backgroundHandler.post(new Runnable() {
 			@Override
 			public void run() {
@@ -152,24 +167,31 @@ public class Networks {
 		return new String(output);
 	}
 
+	public Peer getPeer(PeerId id){
+		if (myId.equals(id))
+			return null;
+		Peer peer = peers.get(id);
+		if (peer == null){
+			peer = new Peer(appContext, id);
+			peers.put(id, peer);
+			Log.v(TAG, "New peer");
+			setAlarm(10);
+		}
+		return peer;
+	}
+
 	private void process(IPInterface network, SocketAddress addr, ByteBuffer buff) {
 		// first message should always be a Header
 		Header hdr = (Header)Message.parseMessage(buff);
 		if (hdr == null)
 			throw new IllegalStateException("Must have a header?");
-		if (myId.equals(hdr.id)) {
+		Peer peer = getPeer(hdr.id);
+		if (peer == null) {
 			// TODO double check that the packet came from one of our interfaces?
 			return;
 		}
-		Log.v(TAG, "Received "+(hdr.unicast?"unicast":"broadcast")+" from "+addr);
 
-		Peer peer = peers.get(hdr.id);
-		if (peer == null){
-			peer = new Peer(hdr.id);
-			peers.put(hdr.id, peer);
-			Log.v(TAG, "New peer");
-			setAlarm(10);
-		}
+		Log.v(TAG, "Received "+(hdr.unicast?"unicast":"broadcast")+" from "+addr);
 
 		PeerSocketLink link = (PeerSocketLink) peer.networkLinks.get(addr);
 		if (link == null){
@@ -321,8 +343,10 @@ public class Networks {
 				}
 			}
 
-			if (p.networkLinks.isEmpty())
+			if (p.networkLinks.isEmpty()) {
+				p.linksDied();
 				pi.remove();
+			}
 		}
 	}
 
@@ -349,6 +373,7 @@ public class Networks {
 			Header hdr = new Header(myId, false);
 			hdr.write(buff);
 
+			// TODO in a crowded network, all link acks might not fit in a single packet
 			Ack ack = new Ack();
 			for(Peer p : peers.values()){
 				for(PeerLink l : p.networkLinks.values()){
@@ -411,5 +436,12 @@ public class Networks {
 			setAlarm(HEARTBEAT_MS);
 		}
 		wakeLock.release();
+	}
+
+	public PeerConnection connectLink(Peer peer, PeerSocketLink link) throws IOException {
+		SocketChannel channel = SocketChannel.open();
+		PeerConnection connection = new PeerConnection(this, channel, peer);
+		nioLoop.register(connection.getInterest(), connection);
+		return connection;
 	}
 }

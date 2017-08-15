@@ -9,8 +9,8 @@ import static org.servalproject.succinct.networking.messages.Message.Type.StoreS
 
 public class StoreState extends Message{
 	private static final int KEY_LEN=8;
-	final String team;
-	final byte[] key;
+	public final String team;
+	public final byte[] key;
 
 	public StoreState(String team, byte[] key) {
 		super(StoreStateMessage);
@@ -28,9 +28,13 @@ public class StoreState extends Message{
 	}
 
 	@Override
-	protected void serialise(ByteBuffer buff) {
+	protected boolean serialise(ByteBuffer buff) {
+		byte[] teamName = team.getBytes();
+		if (buff.remaining() < teamName.length + key.length)
+			return false;
 		buff.put(key);
-		buff.put(team.getBytes());
+		buff.put(teamName);
+		return true;
 	}
 
 	@Override

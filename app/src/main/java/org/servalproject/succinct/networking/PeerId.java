@@ -6,7 +6,7 @@ import java.util.Arrays;
 
 public class PeerId {
 	// How long does an ID need to be?
-	private static final int LEN=4;
+	public static final int LEN=4;
 	private final byte[] id;
 
 	PeerId(byte[] bytes){

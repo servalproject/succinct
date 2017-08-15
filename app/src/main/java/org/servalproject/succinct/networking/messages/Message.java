@@ -2,11 +2,14 @@ package org.servalproject.succinct.networking.messages;
 
 import org.servalproject.succinct.networking.Peer;
 
+import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 
 public abstract class Message {
 	public final Type type;
 	private static final String TAG = "Message";
+	public static final int MTU = 1200;
+
 	Message(Type type){
 		this.type = type;
 	}
@@ -15,7 +18,7 @@ public abstract class Message {
 		HeaderMessage,
 		AckMessage,
 		StoreStateMessage,
-		SyncKeyMessage
+		SyncMsgMessage
 	}
 
 	public static Message parseMessage(ByteBuffer buff){
@@ -41,29 +44,33 @@ public abstract class Message {
 				return new Ack(parseBuff);
 			case StoreStateMessage:
 				return new StoreState(parseBuff);
-			case SyncKeyMessage:
-				return new SyncKey(parseBuff);
+			case SyncMsgMessage:
+				return new SyncMsg(parseBuff);
 		}
 
 		throw new IllegalStateException("Unexpected type!");
 	}
 
-	public void write(ByteBuffer buff){
+	public boolean write(ByteBuffer buff){
 		buff.mark();
 		try {
 			buff.put((byte) type.ordinal());
 			int lenOffset = buff.position();
 			buff.putShort((short) 0);
-			serialise(buff);
-			buff.mark();
-			int len = buff.position() - lenOffset -2;
+			if (!serialise(buff)) {
+				buff.reset();
+				return false;
+			}
+			int len = buff.position() - lenOffset - 2;
 			buff.putShort(lenOffset, (short) len);
-		} finally {
+			return true;
+		} catch (BufferOverflowException e){
 			buff.reset();
+			return false;
 		}
 	}
 
-	protected abstract void serialise(ByteBuffer buff);
+	protected abstract boolean serialise(ByteBuffer buff);
 
 	public abstract void process(Peer peer);
 }

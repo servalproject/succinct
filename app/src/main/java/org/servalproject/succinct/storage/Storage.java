@@ -1,9 +1,8 @@
 package org.servalproject.succinct.storage;
 
-import android.content.Context;
-
 import org.servalproject.succinct.App;
 import org.servalproject.succinct.networking.messages.StoreState;
+import org.servalproject.succinct.networking.messages.SyncMsg;
 
 import java.io.File;
 import java.io.IOException;
@@ -13,7 +12,7 @@ public class Storage {
 	public final String team;
 	private StoreState state;
 	final File root;
-	long ptr;
+	public long ptr;
 
 	private native long open(String path);
 	private native void close(long ptr);
