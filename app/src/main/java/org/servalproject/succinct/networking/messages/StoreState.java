@@ -1,5 +1,6 @@
 package org.servalproject.succinct.networking.messages;
 
+import org.servalproject.succinct.networking.Networks;
 import org.servalproject.succinct.networking.Peer;
 
 import java.nio.ByteBuffer;
@@ -8,7 +9,7 @@ import java.util.Arrays;
 import static org.servalproject.succinct.networking.messages.Message.Type.StoreStateMessage;
 
 public class StoreState extends Message{
-	private static final int KEY_LEN=8;
+	private static final int KEY_LEN=32;
 	public final String team;
 	public final byte[] key;
 
@@ -16,6 +17,8 @@ public class StoreState extends Message{
 		super(StoreStateMessage);
 		this.team = team;
 		this.key = key;
+		if (key.length != KEY_LEN)
+			throw new IllegalStateException("Expected len "+KEY_LEN+", got "+ key.length);
 	}
 
 	StoreState(ByteBuffer buff){
@@ -40,6 +43,11 @@ public class StoreState extends Message{
 	@Override
 	public void process(Peer peer) {
 		peer.setStoreState(this);
+	}
+
+	@Override
+	public String toString() {
+		return getClass().getName()+" "+team+" "+Networks.dump(key);
 	}
 
 	@Override

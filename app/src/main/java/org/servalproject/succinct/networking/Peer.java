@@ -15,7 +15,7 @@ public class Peer {
 	public final PeerId id;
 	private StoreState storeState;
 	private long syncState=0;
-	private PeerConnection connection;
+	PeerConnection connection;
 
 	private static final String TAG = "Peer";
 	public final Map<Object, PeerLink> networkLinks = new HashMap<>();
@@ -35,7 +35,7 @@ public class Peer {
 			return;
 
 		// TODO should we avoid sending if changed to equal?
-		boolean sendRoot = (storeState != null || !storeState.equals(appContext.teamStorage.getState()));
+		boolean sendRoot = (storeState != null || !state.equals(appContext.teamStorage.getState()));
 
 		storeState = state;
 		if (sendRoot)

@@ -27,7 +27,7 @@ public abstract class NioHandler<T extends SelectableChannel> {
 	}
 
 	public void setInterest(int ops){
-		if (ops == key.interestOps())
+		if (key == null || ops == key.interestOps())
 			return;
 		key.interestOps(ops);
 		loop.wakeUp();

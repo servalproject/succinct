@@ -9,12 +9,14 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 
 public abstract class StreamHandler extends NioHandler<SocketChannel> {
-	private ByteBuffer readBuffer = ByteBuffer.allocate(Message.MTU);
-	private ByteBuffer writeBuffer = ByteBuffer.allocate(Message.MTU);
+	private ByteBuffer readBuffer;
+	private ByteBuffer writeBuffer;
 
 	protected StreamHandler(SocketChannel channel) {
 		super(channel);
-		tryFill();
+		readBuffer = ByteBuffer.allocate(Message.MTU);
+		writeBuffer = ByteBuffer.allocate(Message.MTU);
+		writeBuffer.flip();
 	}
 
 	public int getInterest(){
@@ -36,7 +38,11 @@ public abstract class StreamHandler extends NioHandler<SocketChannel> {
 
 	@Override
 	public void read() throws IOException {
-		channel.read(readBuffer);
+		int read = channel.read(readBuffer);
+		if (read == -1) {
+			channel.close();
+			return;
+		}
 		readBuffer.flip();
 		emptyReadBuffer(readBuffer);
 		readBuffer.compact();
@@ -48,7 +54,11 @@ public abstract class StreamHandler extends NioHandler<SocketChannel> {
 	@Override
 	public void write() throws IOException {
 		synchronized (writeBuffer) {
-			channel.write(writeBuffer);
+			int wrote = channel.write(writeBuffer);
+			if (wrote == -1) {
+				channel.close();
+				return;
+			}
 		}
 		tryFill();
 	}

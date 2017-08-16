@@ -55,7 +55,6 @@ public class Ack extends Message {
 		}
 
 		private LinkAck(PeerId id, boolean broadcast, boolean unicast){
-			Log.v(TAG, "Building ack ("+broadcast+", "+unicast+")");
 			this.id = id;
 			this.broadcast = broadcast;
 			this.unicast = unicast;

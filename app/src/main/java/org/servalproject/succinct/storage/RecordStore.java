@@ -56,7 +56,7 @@ public class RecordStore {
 	}
 
 	public synchronized void flush(){
-		if (flush(store.ptr, ptr)!=0)
+		if (flush(store.ptr, ptr)<0)
 			throw new IllegalStateException("Unknown error");
 	}
 

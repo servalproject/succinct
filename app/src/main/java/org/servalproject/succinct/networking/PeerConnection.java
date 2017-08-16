@@ -23,6 +23,7 @@ public class PeerConnection extends StreamHandler {
 		this.networks = networks;
 		this.peer = peer;
 		queue.add(new Header(networks.myId, true));
+		tryFill();
 	}
 
 	@Override

@@ -26,10 +26,13 @@ public class TeamMember {
         this.id = id;
     }
 
+    private static TeamMember me;
     public static TeamMember myself() {
-        TeamMember me = new TeamMember();
-        me.setName("Joe Bloggs");
-        me.setId(24601);
+        if (me == null) {
+            me = new TeamMember();
+            me.setName("Joe Bloggs");
+            me.setId(24601);
+        }
         return me;
     }
 }

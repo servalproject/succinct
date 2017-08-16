@@ -7,8 +7,12 @@ import java.nio.ByteBuffer;
 
 public abstract class Message {
 	public final Type type;
-	private static final String TAG = "Message";
 	public static final int MTU = 1200;
+
+	@Override
+	public String toString() {
+		return "Message "+getClass().getName();
+	}
 
 	Message(Type type){
 		this.type = type;

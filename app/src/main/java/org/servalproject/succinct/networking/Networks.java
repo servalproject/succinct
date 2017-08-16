@@ -151,7 +151,7 @@ public class Networks {
 
 	private final static char[] hexArray = "0123456789ABCDEF".toCharArray();
 	public static String dump(ByteBuffer buff){
-		if (!buff.hasRemaining())
+		if (buff==null || !buff.hasRemaining())
 			return "[]";
 		int len = buff.remaining();
 		if (len > 20)
@@ -160,6 +160,22 @@ public class Networks {
 		int j=0;
 		for (int i=buff.position(); i < buff.position()+len; i++) {
 			int value = buff.get(i) & 0xFF;
+			output[j++] = ' ';
+			output[j++] = hexArray[value>>>4];
+			output[j++] = hexArray[value & 0xF];
+		}
+		return new String(output);
+	}
+	public static String dump(byte[] bytes){
+		if (bytes == null || bytes.length==0)
+			return "[]";
+		int len = bytes.length;
+		if (len > 20)
+			len = 20;
+		char[] output = new char[len*3];
+		int j=0;
+		for (int i=0; i < len; i++) {
+			int value = bytes[i] & 0xFF;
 			output[j++] = ' ';
 			output[j++] = hexArray[value>>>4];
 			output[j++] = hexArray[value & 0xF];
@@ -191,7 +207,7 @@ public class Networks {
 			return;
 		}
 
-		Log.v(TAG, "Received "+(hdr.unicast?"unicast":"broadcast")+" from "+addr);
+		//Log.v(TAG, "Received "+(hdr.unicast?"unicast":"broadcast")+" from "+addr);
 
 		PeerSocketLink link = (PeerSocketLink) peer.networkLinks.get(addr);
 		if (link == null){
@@ -225,7 +241,7 @@ public class Networks {
 			link.lastAckTime = SystemClock.elapsedRealtime();
 			link.ackedUnicast = linkAck.unicast;
 			link.ackedBroadcast = linkAck.broadcast;
-			Log.v(TAG, "link acked "+link.addr+" "+link.theyAckedBroadcast()+", "+link.theyAckedUnicast());
+			//Log.v(TAG, "link acked "+link.addr+" "+link.theyAckedBroadcast()+", "+link.theyAckedUnicast());
 		}
 	}
 
@@ -233,15 +249,20 @@ public class Networks {
 	private AlarmManager.OnAlarmListener listener=null;
 	private long nextAlarm=-1;
 	public void setAlarm(int delay){
-		if (networks.isEmpty() || !backgroundEnabled)
+		//Log.v(TAG, "Set alarm in "+delay);
+		if (networks.isEmpty() || !backgroundEnabled) {
+			//Log.v(TAG, "No enabled network");
 			return;
+		}
 
 		long newAlarm = SystemClock.elapsedRealtime()+delay;
 		// Don't delay an alarm that has already been set
-		if (nextAlarm!=-1 && newAlarm > nextAlarm)
+		if (nextAlarm!=-1 && newAlarm > nextAlarm) {
+			//Log.v(TAG, "Alarm already set");
 			return;
+		}
 
-		cancelAlarm();
+		//cancelAlarm();
 		nextAlarm = newAlarm;
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
 			if (listener == null){
@@ -274,16 +295,21 @@ public class Networks {
 						alarmIntent);
 			}
 		}
+		//Log.v(TAG, "Alarm set for "+newAlarm);
 	}
 
 	private void cancelAlarm(){
 		nextAlarm = -1;
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-			if (listener!=null)
+			if (listener!=null) {
 				am.cancel(listener);
+				//Log.v(TAG, "Alarm cancelled");
+			}
 		}else{
-			if (alarmIntent!=null)
+			if (alarmIntent!=null) {
 				am.cancel(alarmIntent);
+				//Log.v(TAG, "Alarm cancelled");
+			}
 			alarmIntent = null;
 		}
 	}
@@ -343,7 +369,7 @@ public class Networks {
 				}
 			}
 
-			if (p.networkLinks.isEmpty()) {
+			if (p.networkLinks.isEmpty() && p.connection==null) {
 				p.linksDied();
 				pi.remove();
 			}
@@ -365,6 +391,7 @@ public class Networks {
 
 	public void onAlarm() {
 		nextAlarm = -1;
+		//Log.v(TAG, "Alarm!");
 		if (backgroundEnabled && !networks.isEmpty()) {
 			trimDead();
 
@@ -394,7 +421,7 @@ public class Networks {
 
 			buff.flip();
 			for (IPInterface i : networks) {
-				Log.v(TAG, "Sending heartbeat ["+dump(buff)+"] to " + i);
+				//Log.v(TAG, "Sending heartbeat ["+dump(buff)+"] to " + i);
 				try {
 					dgram.send(buff, new InetSocketAddress(i.broadcastAddress, PORT));
 				} catch (SecurityException se) {
@@ -421,7 +448,7 @@ public class Networks {
 
 				buff.flip();
 
-				Log.v(TAG, "Sending unicast heartbeat ["+dump(buff)+"] to " + link.addr);
+				//Log.v(TAG, "Sending unicast heartbeat ["+dump(buff)+"] to " + link.addr);
 				try {
 					dgram.send(buff, link.addr);
 				} catch (SecurityException se) {
@@ -442,6 +469,7 @@ public class Networks {
 		SocketChannel channel = SocketChannel.open();
 		PeerConnection connection = new PeerConnection(this, channel, peer);
 		nioLoop.register(connection.getInterest(), connection);
+		channel.connect(link.addr);
 		return connection;
 	}
 }

@@ -192,7 +192,7 @@ static struct node *add_key(struct node **root, const sync_key_t *key, void *con
   }
   // create final leaf node
   *node = (struct node *)malloc(sizeof(struct node));
-  memset(node, 0, sizeof(struct node));
+  memset((*node), 0, sizeof(struct node));
   (*node)->message.key = *key;
   (*node)->message.min_prefix_len = min_prefix_len;
   (*node)->message.prefix_len = KEY_LEN_BITS;

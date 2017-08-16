@@ -21,6 +21,11 @@ public class PeerId {
 		new SecureRandom().nextBytes(id);
 	}
 
+	@Override
+	public String toString() {
+		return Networks.dump(id);
+	}
+
 	public void write(ByteBuffer buff){
 		buff.put(id);
 	}

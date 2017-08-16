@@ -46,12 +46,12 @@ public class NioLoop implements Runnable{
 					try {
 						if (key.isAcceptable())
 							handler.accept(this);
-						if (key.isReadable())
-							handler.read();
-						if (key.isWritable())
-							handler.write();
-						if (key.isConnectable())
+						else if (key.isConnectable())
 							handler.connect();
+						else if (key.isReadable())
+							handler.read();
+						else if (key.isWritable())
+							handler.write();
 						i.remove();
 					}catch (IOException e){
 						Log.e(TAG, e.getMessage(), e);

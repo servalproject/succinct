@@ -22,7 +22,7 @@ public class Storage {
 	public Storage(App appContext, String team){
 		this.appContext = appContext;
 		this.team = team;
-		this.root = new File(appContext.getExternalFilesDir("storage"), team);
+		this.root = appContext.getExternalFilesDir(team);
 		ptr = open(root.getAbsolutePath());
 		if (ptr==0)
 			throw new IllegalStateException("storage open failed");
@@ -34,7 +34,8 @@ public class Storage {
 
 	private void jniCallback(byte[] rootHash){
 		state = new StoreState(team, rootHash);
-		appContext.networks.setAlarm(10);
+		if (appContext.networks!=null)
+			appContext.networks.setAlarm(10);
 	}
 
 	public RecordStore openFile(String relativePath) throws IOException {
