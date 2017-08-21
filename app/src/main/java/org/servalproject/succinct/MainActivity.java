@@ -27,12 +27,15 @@ import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
 import org.mapsforge.map.layer.cache.TileCache;
 import org.servalproject.succinct.location.LocationService;
 import org.servalproject.succinct.location.LocationService.LocationBroadcastReceiver;
+import org.servalproject.succinct.team.TeamMember;
 
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener {
@@ -48,6 +51,8 @@ public class MainActivity extends AppCompatActivity
 
     private LocationService locationService;
     private boolean locationServiceBound;
+
+    private View navHeader;
 
     public enum PermissionState {
         PERMITTED,
@@ -78,6 +83,10 @@ public class MainActivity extends AppCompatActivity
 
         NavigationView navigationView = (NavigationView) findViewById(R.id.nav_view);
         navigationView.setNavigationItemSelectedListener(this);
+        navHeader = navigationView.getHeaderView(0);
+
+        // todo need to read identity on startup
+        updateIdentity();
 
         Log.d(TAG, "onCreate checkAllPermissions");
         PermissionState state = checkAllPermissions();
@@ -307,6 +316,20 @@ public class MainActivity extends AppCompatActivity
                     }
                 });
         builder.show();
+    }
+
+    protected void updateIdentity() {
+        TeamMember me = TeamMember.getMyself();
+        TextView name = (TextView) navHeader.findViewById(R.id.nav_name);
+        TextView id = (TextView) navHeader.findViewById(R.id.nav_id);
+        if (me.isValid()) {
+            name.setText(me.getName());
+            String idString = getResources().getString(R.string.id) + " " + me.getId();
+            id.setText(idString);
+        } else {
+            name.setText(null);
+            id.setText(null);
+        }
     }
 
     @Override

@@ -16,4 +16,5 @@
     <string name="rock_send">Send Message (Hello)</string>
     <string name="rock_send_raw">Send Raw (Hello)</string>
     <string name="rock_enable">Enable</string>
+    <string name="id">ID</string>
 </resources>
