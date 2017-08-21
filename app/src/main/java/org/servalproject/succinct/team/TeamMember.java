@@ -7,8 +7,20 @@ package org.servalproject.succinct.team;
 public class TeamMember {
     // fixme just a placeholder - will probably remove in future
 
+    static TeamMember myself = new TeamMember("Joe Bloggs", 24601, new Team("Team A"));
+
+    private Team team;
     private String name;
     private int id;
+
+    public TeamMember() {
+    }
+
+    private TeamMember(String name, int id, Team team) {
+        this.name = name;
+        this.id = id;
+        this.team = team;
+    }
 
     public String getName() {
         return name;
@@ -26,13 +38,19 @@ public class TeamMember {
         this.id = id;
     }
 
-    private static TeamMember me;
-    public static TeamMember myself() {
-        if (me == null) {
-            me = new TeamMember();
-            me.setName("Joe Bloggs");
-            me.setId(24601);
-        }
-        return me;
+    public Team getTeam() {
+        return team;
+    }
+
+    public void setTeam(Team team) {
+        this.team = team;
+    }
+
+    public boolean isValid() {
+        return (name != null && !name.isEmpty() && id > 0);
+    }
+
+    public static TeamMember getMyself() {
+        return myself;
     }
 }

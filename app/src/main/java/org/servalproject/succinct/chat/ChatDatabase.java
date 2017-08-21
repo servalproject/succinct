@@ -95,7 +95,7 @@ public class ChatDatabase extends SQLiteOpenHelper {
 
     public ChatMessageCursor getChatMessageCursor() {
         SQLiteDatabase db = getReadableDatabase();
-        int mySenderId = TeamMember.myself().getId();
+        int mySenderId = TeamMember.getMyself().getId();
         final String SELECT_CHAT_MESSAGES = "SELECT "
                 + ChatMessageTable._TABLE_NAME + "." + ChatMessageTable._ID + ", "
                 + ChatMessageTable.TYPE + ", "

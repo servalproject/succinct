@@ -2,7 +2,6 @@ package org.servalproject.succinct;
 
 
 import android.app.LoaderManager;
-import android.content.Context;
 import android.content.Loader;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -80,8 +79,8 @@ public class ChatFragment extends Fragment implements LoaderManager.LoaderCallba
             protected Void doInBackground(String... strings) {
                 ChatMessage msg = new ChatMessage();
                 msg.type = ChatDatabase.TYPE_MESSAGE;
-                msg.sender = TeamMember.myself().getName();
-                msg.senderId = TeamMember.myself().getId();
+                msg.sender = TeamMember.getMyself().getName();
+                msg.senderId = TeamMember.getMyself().getId();
                 msg.message = s;
                 msg.time = new Date();
                 msg.isRead = true;
