@@ -18,11 +18,16 @@ public abstract class Message {
 		this.type = type;
 	}
 
+	// Note; type ordinals are currently both the network id of the message
+	// and a priority order for synchronisation
+	// for backward compatibility, we may need to break one of these in future...
 	public enum Type{
 		HeaderMessage,
 		AckMessage,
 		StoreStateMessage,
-		SyncMsgMessage
+		SyncMsgMessage,
+		RequestBlockMessage,
+		FileBlockMessage,
 	}
 
 	public static Message parseMessage(ByteBuffer buff){
@@ -50,12 +55,39 @@ public abstract class Message {
 				return new StoreState(parseBuff);
 			case SyncMsgMessage:
 				return new SyncMsg(parseBuff);
+			case RequestBlockMessage:
+				return new RequestBlock(parseBuff);
+			case FileBlockMessage:
+				return new FileBlock(parseBuff);
 		}
 
 		throw new IllegalStateException("Unexpected type!");
 	}
 
+	public static long getPackedLong(ByteBuffer buffer){
+		long ret=0;
+		int shift=0;
+		while(true){
+			int val = buffer.get() & 0xFF;
+			if (val==0)
+				break;
+			ret |= (val & 0x7f)<<shift;
+			shift+=7;
+		}
+		return ret;
+	}
+
+	public static void putPackedLong(ByteBuffer buffer, long value){
+		while (value != 0) {
+			buffer.put((byte)(0x80 | (value & 0x7f)));
+			value = value >>> 7;
+		}
+		buffer.put((byte)0);
+	}
+
 	public boolean write(ByteBuffer buff){
+		if (buff.remaining()<3)
+			return false;
 		buff.mark();
 		try {
 			buff.put((byte) type.ordinal());

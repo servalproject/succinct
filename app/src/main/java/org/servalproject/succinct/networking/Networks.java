@@ -25,9 +25,7 @@ import java.net.SocketAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.DatagramChannel;
-import java.nio.channels.SelectableChannel;
 import java.nio.channels.SelectionKey;
-import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.HashMap;
@@ -369,7 +367,7 @@ public class Networks {
 				}
 			}
 
-			if (p.networkLinks.isEmpty() && p.connection==null) {
+			if (!p.isAlive()) {
 				p.linksDied();
 				pi.remove();
 			}

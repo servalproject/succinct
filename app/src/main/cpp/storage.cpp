@@ -130,6 +130,15 @@ static int send_message(JNIEnv* env, jobject object, uint8_t type, const uint8_t
     return 0;
 }
 
+static void call_peer_has(JNIEnv* env, jobject peer, const sync_key_t *sync_key, const struct file_version *version){
+    jbyteArray key = env->NewByteArray(sizeof(sync_key_t));
+    env->SetByteArrayRegion(key, 0, sizeof(sync_key_t), (const jbyte *) sync_key->key);
+    jstring filename = env->NewStringUTF(version->name);
+    env->CallVoidMethod(peer, jni_peer_has, key, filename, (jlong)version->length);
+    env->DeleteLocalRef(key);
+    env->DeleteLocalRef(filename);
+}
+
 static int process_difference(struct dbstate *state, jobject peer, const sync_key_t *sync_key){
     // do we already know what this hash refers to?
     JNIEnv* env;
@@ -154,10 +163,7 @@ static int process_difference(struct dbstate *state, jobject peer, const sync_ke
 
         // we could compare their version to ours here,
         // but it's likely that we'll need to call file_open anyway, or have already done so.
-
-        jstring filename = env->NewStringUTF(peer_version->name);
-        env->CallVoidMethod(peer, jni_peer_has, filename, (jlong)peer_version->length);
-        env->DeleteLocalRef(filename);
+        call_peer_has(env, peer, sync_key, peer_version);
     }
     mdb_txn_abort(txn);
     return 0;
@@ -216,11 +222,7 @@ static void receive_metadata(JNIEnv* env, struct dbstate *state, jobject peer, c
     if (mdb_txn_commit(txn)!=0)
         goto error;
 
-    {
-        jstring filename = env->NewStringUTF(peer_version->name);
-        env->CallVoidMethod(peer, jni_peer_has, filename, (jlong)peer_version->length);
-        env->DeleteLocalRef(filename);
-    }
+    call_peer_has(env, peer, sync_key, peer_version);
     return;
 
 error:
@@ -272,7 +274,6 @@ static void init_sync_state(struct dbstate *state){
 
 static struct file_data *file_open(struct dbstate *state, const char *name){
     MDB_txn *txn;
-    LOGIF("file_open %s", name);
     if (mdb_txn_begin(state->env, NULL, MDB_RDONLY, &txn)!=0)
         return NULL;
 
@@ -322,79 +323,97 @@ static void file_append(struct file_data *file, uint8_t *data, size_t len){
     file->new_length+=len;
 }
 
-static int file_flush(struct dbstate *state, struct file_data *file){
+static int file_flush(struct dbstate *state, struct file_data *file, const uint8_t *expected_hash, size_t hash_len) {
     MDB_txn *txn;
     MDB_val key;
     MDB_val val;
     struct file_version new_version;
-    uint8_t old_hash[crypto_hash_sha256_BYTES];
+    struct file_data new_data;
+    uint8_t new_root[crypto_hash_sha256_BYTES];
 
     if (file->length == file->new_length)
         return 0;
 
-    file->version++;
-    file->length = file->new_length;
-    file->partial_hash = file->new_hash;
+    new_data = *file;
+    crypto_hash_sha256_final(&new_data.new_hash, new_data.hash);
 
-    memcpy(old_hash, file->hash, sizeof file->hash);
+    if (hash_len && memcmp(expected_hash, new_data.hash, hash_len) != 0) {
+        LOGIF("Hash comparison failed");
+        goto rewind;
+    }
 
-    crypto_hash_sha256_state hash_state = file->new_hash;
-    crypto_hash_sha256_final(&hash_state, file->hash);
+    new_data.version++;
+    new_data.partial_hash = new_data.new_hash = file->new_hash;
+    new_data.length = new_data.new_length;
 
-    memset(&new_version, 0, sizeof new_version);
+    if (mdb_txn_begin(state->env, NULL, 0, &txn) != 0) {
+        LOGIF("mdb_txn_begin failed");
+        goto rewind;
+    }
 
-    strcpy(new_version.name, file->name);
-    new_version.version = file->version;
-    new_version.length = file->length;
-
-    if (mdb_txn_begin(state->env, NULL, 0, &txn)!=0)
-        return -1;
-
-    key.mv_data = (void *)file->name;
+    key.mv_data = (void *) file->name;
     key.mv_size = strlen(file->name);
-    val.mv_data = file;
+    val.mv_data = &new_data;
     val.mv_size = PERSIST_LEN;
 
-    if (mdb_put(txn, state->files, &key, &val, 0)!=0)
+    if (mdb_put(txn, state->files, &key, &val, 0) != 0) {
+        LOGIF("mdb_put failed");
         goto error;
+    }
 
     // TODO purge really old index records?
+    memset(&new_version, 0, sizeof new_version);
+    strcpy(new_version.name, file->name);
+    new_version.version = new_data.version;
+    new_version.length = new_data.length;
 
-    key.mv_data = (void *)file->hash;
+    key.mv_data = (void *) new_data.hash;
     key.mv_size = sizeof(sync_key_t);
     val.mv_data = &new_version;
     val.mv_size = sizeof new_version;
 
-    if (mdb_put(txn, state->index, &key, &val, 0)!=0)
+    if (mdb_put(txn, state->index, &key, &val, 0) != 0) {
+        LOGIF("mdb_put failed");
         goto error;
+    }
 
     // XOR the old and new hash with the root hash
-    for(unsigned i=0;i<sizeof old_hash;i++)
-        old_hash[i] ^= state->root_hash[i] ^ file->hash[i];
+    for (unsigned i = 0; i < sizeof new_root; i++)
+        new_root[i] = state->root_hash[i] ^ new_data.hash[i] ^ file->hash[i];
 
-    key.mv_data = (void *)"_";
+    key.mv_data = (void *) "_";
     key.mv_size = 1;
-    val.mv_data = old_hash;
-    val.mv_size = sizeof old_hash;
+    val.mv_data = new_root;
+    val.mv_size = sizeof new_root;
 
-    if (mdb_put(txn, state->index, &key, &val, 0)!=0)
+    if (mdb_put(txn, state->index, &key, &val, 0) != 0) {
+        LOGIF("mdb_put failed");
         goto error;
+    }
 
-    if (mdb_txn_commit(txn) !=0)
+    if (mdb_txn_commit(txn) != 0) {
+        LOGIF("mdb_txn_commit failed");
         goto error;
+    }
+
+    // Now we can and must update the state of the file
+    memcpy(state->root_hash, new_root, sizeof new_root);
+    *file = new_data;
 
     if (state->sync_state) {
         // TODO remove old sync keys?
         sync_add_key(state->sync_state, (sync_key_t *) file->hash, NULL);
     }
 
-    memcpy(state->root_hash, old_hash, sizeof old_hash);
-
     LOGIF("flushed file %s, len %d", file->name, (int)file->length);
     return 1;
 
 error:
     mdb_txn_abort(txn);
+
+rewind:
+    file->new_length = file->length;
+    file->new_hash = file->partial_hash;
     return -1;
 }
 
@@ -453,15 +472,20 @@ static void JNICALL jni_file_append(JNIEnv *env, jobject object, jlong file_ptr,
     file_append(file, (uint8_t *) buff, (size_t)len);
 }
 
-static jint JNICALL jni_file_flush(JNIEnv *env, jobject object, jlong store_ptr, jlong file_ptr)
+static jint JNICALL jni_file_flush(JNIEnv *env, jobject object, jlong store_ptr, jlong file_ptr, jbyteArray expectedHash)
 {
     struct dbstate *state = (struct dbstate *)store_ptr;
     struct file_data *file = (file_data *) file_ptr;
-    int ret = file_flush(state, file);
-    if (ret==1){
+
+    int hash_length = expectedHash ? env->GetArrayLength(expectedHash) : 0;
+    uint8_t hash[hash_length];
+    if (hash_length)
+        env->GetByteArrayRegion(expectedHash, 0, hash_length, (jbyte *) hash);
+    int ret = file_flush(state, file, hash, (size_t)hash_length);
+    if (ret!=0)
         env->CallVoidMethod(object, jni_file_callback, (jlong)file->length);
+    if (ret==1)
         storage_callback(env, state);
-    }
     return (jint)ret;
 }
 
@@ -523,7 +547,7 @@ static JNINativeMethod storage_methods[] = {
 static JNINativeMethod file_methods[] = {
         {"open", "(JLjava/lang/String;)J", (void*)jni_file_open },
         {"append", "(J[BII)V", (void*)jni_file_append },
-        {"flush", "(JJ)I", (void*)jni_file_flush },
+        {"flush", "(JJ[B)I", (void*)jni_file_flush },
         {"close", "(J)V", (void*)jni_file_close },
 };
 
@@ -560,7 +584,7 @@ int jni_register_storage(JNIEnv* env){
     jni_sync_message = env->GetMethodID(peer, "syncMessage", "([B)V");
     if (env->ExceptionCheck())
         return -1;
-    jni_peer_has = env->GetMethodID(peer, "peerHas", "(Ljava/lang/String;J)V");
+    jni_peer_has = env->GetMethodID(peer, "peerHas", "([BLjava/lang/String;J)V");
     if (env->ExceptionCheck())
         return -1;
     env->RegisterNatives(peer, peer_methods, NELS(peer_methods));

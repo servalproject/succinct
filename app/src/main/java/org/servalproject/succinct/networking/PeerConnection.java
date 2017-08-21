@@ -1,3 +1,4 @@
+
 package org.servalproject.succinct.networking;
 
 import org.servalproject.succinct.networking.messages.Header;
@@ -6,13 +7,19 @@ import org.servalproject.succinct.networking.messages.Message;
 import java.net.ProtocolException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
-import java.util.LinkedList;
+import java.util.Comparator;
+import java.util.PriorityQueue;
 import java.util.Queue;
 
 public class PeerConnection extends StreamHandler {
 	private final Networks networks;
 	private Peer peer;
-	private final Queue<Message> queue = new LinkedList<>();
+	private final Queue<Message> queue = new PriorityQueue<>(10, new Comparator<Message>() {
+		@Override
+		public int compare(Message one, Message two) {
+			return two.type.ordinal() - one.type.ordinal();
+		}
+	});
 
 	public PeerConnection(Networks networks, SocketChannel client) {
 		this(networks, client, null);
@@ -62,11 +69,17 @@ public class PeerConnection extends StreamHandler {
 				break;
 			queue.poll();
 		}
-		// TODO do file content messages go through the queue? or should we get one now?
 	}
 
 	public void queue(Message message) {
 		queue.add(message);
 		tryFill();
+	}
+
+	@Override
+	public void close() {
+		super.close();
+		if (peer!=null && peer.connection == this)
+			peer.connection = null;
 	}
 }

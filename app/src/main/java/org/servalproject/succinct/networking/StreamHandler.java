@@ -21,9 +21,9 @@ public abstract class StreamHandler extends NioHandler<SocketChannel> {
 
 	public int getInterest(){
 		int ops = 0;
-		if (!channel.isConnected())
+		if (channel.isConnectionPending())
 			ops|=SelectionKey.OP_CONNECT;
-		else{
+		else if(channel.isConnected()){
 			if (readBuffer.hasRemaining())
 				ops|=SelectionKey.OP_READ;
 			if (writeBuffer.hasRemaining())
@@ -40,7 +40,7 @@ public abstract class StreamHandler extends NioHandler<SocketChannel> {
 	public void read() throws IOException {
 		int read = channel.read(readBuffer);
 		if (read == -1) {
-			channel.close();
+			close();
 			return;
 		}
 		readBuffer.flip();
@@ -56,7 +56,7 @@ public abstract class StreamHandler extends NioHandler<SocketChannel> {
 		synchronized (writeBuffer) {
 			int wrote = channel.write(writeBuffer);
 			if (wrote == -1) {
-				channel.close();
+				close();
 				return;
 			}
 		}

@@ -1,7 +1,5 @@
 package org.servalproject.succinct.networking.messages;
 
-import android.util.Log;
-
 import org.servalproject.succinct.networking.Peer;
 import org.servalproject.succinct.networking.PeerId;
 import org.servalproject.succinct.networking.PeerSocketLink;

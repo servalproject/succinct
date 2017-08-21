@@ -2,10 +2,12 @@ package org.servalproject.succinct.storage;
 
 import org.servalproject.succinct.App;
 import org.servalproject.succinct.networking.messages.StoreState;
-import org.servalproject.succinct.networking.messages.SyncMsg;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.ref.WeakReference;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Storage {
 	private final App appContext;
@@ -38,9 +40,17 @@ public class Storage {
 			appContext.networks.setAlarm(10);
 	}
 
+	private Map<String, WeakReference<RecordStore>> files = new HashMap<>();
 	public RecordStore openFile(String relativePath) throws IOException {
-		// TODO cache objects?
-		return new RecordStore(this, relativePath);
+		RecordStore file = null;
+		WeakReference<RecordStore> ref = files.get(relativePath);
+		if (ref != null)
+			file = ref.get();
+		if (file == null){
+			file = new RecordStore(this, relativePath);
+			files.put(relativePath, new WeakReference<>(file));
+		}
+		return file;
 	}
 
 	public void close(){

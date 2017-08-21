@@ -8,8 +8,6 @@ import org.servalproject.succinct.messaging.rock.RockMessaging;
 import org.servalproject.succinct.networking.Networks;
 import org.servalproject.succinct.storage.Storage;
 
-import java.net.SocketException;
-
 public class App extends Application {
 	public static Handler UIHandler;
 	private RockMessaging rock;

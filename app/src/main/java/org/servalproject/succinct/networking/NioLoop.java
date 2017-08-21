@@ -38,6 +38,7 @@ public class NioLoop implements Runnable{
 		try {
 			while(true){
 				selector.select();
+
 				Iterator<SelectionKey> i = selector.selectedKeys().iterator();
 				while(i.hasNext()){
 					SelectionKey key = i.next();

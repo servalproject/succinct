@@ -1,25 +1,30 @@
 package org.servalproject.succinct.storage;
 
+import org.servalproject.succinct.networking.Networks;
+
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.util.HashMap;
+import java.net.ProtocolException;
+import java.nio.ByteBuffer;
 
 public class RecordStore {
+	private final String filename;
 	private final Storage store;
 	private final RandomAccessFile file;
-	long EOF=0;
+	public long EOF=0;
 	private long appendOffset;
 	private long ptr;
+	public PeerTransfer activeTransfer;
 
 	private native long open(long storePtr, String relativePath);
 	private native void append(long filePtr, byte[] bytes, int offset, int length);
-	private native int flush(long storePtr, long filePtr);
+	private native int flush(long storePtr, long filePtr, byte[] expectedHash);
 	private native void close(long ptr);
 
 	RecordStore(Storage storage, String relativePath) throws IOException {
 		this.store = storage;
+		this.filename = relativePath;
 		File f = new File(storage.root, relativePath);
 		f.getParentFile().mkdirs();
 		this.file = new RandomAccessFile(f, "rw");
@@ -28,15 +33,32 @@ public class RecordStore {
 			throw new IllegalStateException("file open failed");
 	}
 
-	// called from JNI
+	public synchronized boolean setTranfer(PeerTransfer transfer){
+		if (activeTransfer != null)
+			return false;
+		activeTransfer = transfer;
+		return true;
+	}
+
+	public synchronized void cancel(PeerTransfer transfer){
+		if (activeTransfer == transfer)
+			activeTransfer = null;
+	}
+
+	// called from JNI on open or flush success / failure
 	private void jniCallback(long length){
 		appendOffset = EOF = length;
 		// TODO observer callbacks after syncing changes?
 	}
 
-	synchronized void readBytes(long offset, byte[] bytes) throws IOException {
+	public synchronized void readBytes(long offset, byte[] bytes) throws IOException {
 		file.seek(offset);
 		file.readFully(bytes);
+	}
+
+	public synchronized int readBytes(long offset, ByteBuffer buffer) throws IOException {
+		file.seek(offset);
+		return file.getChannel().read(buffer);
 	}
 
 	int readLength(long offset) throws IOException {
@@ -49,15 +71,29 @@ public class RecordStore {
 	}
 
 	public synchronized void append(byte[] bytes, int offset, int length) throws IOException{
+		if (length <= 0)
+			return;
 		file.seek(appendOffset);
 		file.write(bytes, offset, length);
 		appendOffset+=length;
 		append(ptr, bytes, offset, length);
 	}
 
-	public synchronized void flush(){
-		if (flush(store.ptr, ptr)<0)
-			throw new IllegalStateException("Unknown error");
+	public synchronized void appendAt(long fileOffset, byte[] bytes) throws IOException{
+		if (fileOffset > appendOffset)
+			throw new ProtocolException("Cannot append beyond the current end of file");
+		int offset = (int) (appendOffset - fileOffset);
+		append(bytes, offset, bytes.length - offset);
+
+		if (activeTransfer!=null && activeTransfer.newLength == appendOffset) {
+			flush(activeTransfer.expectedHash);
+			activeTransfer = null;
+		}
+	}
+
+	public synchronized void flush(byte[] expectedHash) throws ProtocolException {
+		if (flush(store.ptr, ptr, expectedHash)<0)
+			throw new ProtocolException("Unknown error flushing file "+filename+ Networks.dump(expectedHash));
 	}
 
 	public void appendRecord(byte[] record) throws IOException {
@@ -70,7 +106,7 @@ public class RecordStore {
 		System.arraycopy(record, 0, completeRecord, 4, record.length);
 		synchronized (this) {
 			append(completeRecord, 0, len);
-			flush();
+			flush(null);
 		}
 	}
 
