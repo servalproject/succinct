@@ -1,5 +1,6 @@
 package org.servalproject.succinct.storage;
 
+import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.networking.Networks;
 
 import java.io.File;
@@ -93,7 +94,7 @@ public class RecordStore {
 
 	public synchronized void flush(byte[] expectedHash) throws ProtocolException {
 		if (flush(store.ptr, ptr, expectedHash)<0)
-			throw new ProtocolException("Unknown error flushing file "+filename+ Networks.dump(expectedHash));
+			throw new ProtocolException("Unknown error flushing file "+filename+ " "+ Hex.toString(expectedHash));
 	}
 
 	public void appendRecord(byte[] record) throws IOException {

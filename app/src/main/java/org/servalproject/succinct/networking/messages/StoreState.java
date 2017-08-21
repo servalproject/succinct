@@ -1,5 +1,6 @@
 package org.servalproject.succinct.networking.messages;
 
+import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.networking.Networks;
 import org.servalproject.succinct.networking.Peer;
 
@@ -47,7 +48,7 @@ public class StoreState extends Message{
 
 	@Override
 	public String toString() {
-		return getClass().getName()+" "+team+" "+Networks.dump(key);
+		return getClass().getName()+" "+team+" " + Hex.toString(key,0,20);
 	}
 
 	@Override

@@ -9,6 +9,10 @@ public class PeerId {
 	public static final int LEN=4;
 	private final byte[] id;
 
+	public PeerId(String value){
+		id = Hex.fromString(value);
+	}
+
 	PeerId(byte[] bytes){
 		this.id = bytes;
 	}
@@ -16,14 +20,14 @@ public class PeerId {
 		this.id = new byte[LEN];
 		buff.get(id);
 	}
-	PeerId(){
+	public PeerId(){
 		this.id = new byte[LEN];
 		new SecureRandom().nextBytes(id);
 	}
 
 	@Override
 	public String toString() {
-		return Networks.dump(id);
+		return Hex.toString(id);
 	}
 
 	public void write(ByteBuffer buff){

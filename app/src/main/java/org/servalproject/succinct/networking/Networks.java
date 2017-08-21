@@ -60,16 +60,17 @@ public class Networks {
 		return instance;
 	}
 
-	public static Networks init(App appContext) throws IOException {
+	public static Networks init(App appContext, PeerId myId) throws IOException {
 		if (instance != null)
 			throw new IllegalStateException("Already created");
 
-		return instance = new Networks(appContext);
+		return instance = new Networks(appContext, myId);
 	}
 
-	private Networks(App context) throws IOException {
+	private Networks(App context, PeerId myId) throws IOException {
 		this.appContext = context;
 		this.nioLoop = new NioLoop();
+		this.myId = myId;
 
 		InetSocketAddress addr = new InetSocketAddress(PORT);
 
@@ -113,8 +114,6 @@ public class Networks {
 		};
 		nioLoop.register(SelectionKey.OP_ACCEPT, acceptHandler);
 
-		// TODO store our id in prefs?
-		myId = new PeerId();
 		am = (AlarmManager)context.getSystemService(Context.ALARM_SERVICE);
 		PowerManager pm = (PowerManager)context.getSystemService(Context.POWER_SERVICE);
 		wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG);
@@ -145,40 +144,6 @@ public class Networks {
 				beginPolling();
 			}
 		});
-	}
-
-	private final static char[] hexArray = "0123456789ABCDEF".toCharArray();
-	public static String dump(ByteBuffer buff){
-		if (buff==null || !buff.hasRemaining())
-			return "[]";
-		int len = buff.remaining();
-		if (len > 20)
-			len = 20;
-		char[] output = new char[len*3];
-		int j=0;
-		for (int i=buff.position(); i < buff.position()+len; i++) {
-			int value = buff.get(i) & 0xFF;
-			output[j++] = ' ';
-			output[j++] = hexArray[value>>>4];
-			output[j++] = hexArray[value & 0xF];
-		}
-		return new String(output);
-	}
-	public static String dump(byte[] bytes){
-		if (bytes == null || bytes.length==0)
-			return "[]";
-		int len = bytes.length;
-		if (len > 20)
-			len = 20;
-		char[] output = new char[len*3];
-		int j=0;
-		for (int i=0; i < len; i++) {
-			int value = bytes[i] & 0xFF;
-			output[j++] = ' ';
-			output[j++] = hexArray[value>>>4];
-			output[j++] = hexArray[value & 0xF];
-		}
-		return new String(output);
 	}
 
 	public Peer getPeer(PeerId id){
