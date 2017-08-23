@@ -4,7 +4,7 @@ import java.io.IOException;
 
 public class RecordIterator<T> {
 	private final Factory<T> factory;
-	private final RecordStore store;
+	final RecordStore store;
 	private long offset;
 	private int recordLength;
 
@@ -45,11 +45,14 @@ public class RecordIterator<T> {
 			return null;
 		byte[] bytes = new byte[recordLength - 8];
 		store.readBytes(offset+4, bytes);
-		return factory.create(bytes);
+		DeSerialiser serialiser = new DeSerialiser(bytes);
+		return factory.create(serialiser);
 	}
 
 	public void append(T object) throws IOException {
-		byte[] bytes = factory.serialise(object);
+		Serialiser serialiser = new Serialiser();
+		factory.serialise(serialiser, object);
+		byte[] bytes = serialiser .getResult();
 		store.appendRecord(bytes);
 	}
 }

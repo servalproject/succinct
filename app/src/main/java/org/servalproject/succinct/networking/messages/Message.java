@@ -64,27 +64,31 @@ public abstract class Message {
 		throw new IllegalStateException("Unexpected type!");
 	}
 
-	public static long getPackedLong(ByteBuffer buffer){
+	public static long getPackedLong(ByteBuffer buff){
 		long ret=0;
 		int shift=0;
 		while(true){
-			int val = buffer.get() & 0xFF;
-			if (val==0)
-				break;
+			int val = buff.get() & 0xFF;
 			ret |= (val & 0x7f)<<shift;
+			if ((val & 0x80) == 0)
+				break;
 			shift+=7;
 		}
 		return ret;
 	}
 
-	public static void putPackedLong(ByteBuffer buffer, long value){
-		while (value != 0) {
-			buffer.put((byte)(0x80 | (value & 0x7f)));
-			value = value >>> 7;
+	// Note, not great for negative numbers
+	public static void putPackedLong(ByteBuffer buff, long value){
+		while(true){
+			if ((value & ~0x7f) !=0) {
+				buff.put((byte) (0x80 | (value & 0x7f)));
+				value = value >>> 7;
+			}else {
+				buff.put((byte) (value & 0x7f));
+				return;
+			}
 		}
-		buffer.put((byte)0);
 	}
-
 	public boolean write(ByteBuffer buff){
 		if (buff.remaining()<3)
 			return false;

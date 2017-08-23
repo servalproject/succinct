@@ -5,12 +5,12 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.SharedPreferences;
 import android.location.Location;
 import android.util.Log;
 
 import org.servalproject.succinct.BuildConfig;
 import org.servalproject.succinct.messaging.IMessaging;
+import org.servalproject.succinct.utils.ChangedObservable;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -74,19 +74,7 @@ public class RockMessaging implements IMessaging {
 
 	private static final String TAG = "RockMessaging";
 
-	public final Observable observable = new Observable(){
-		@Override
-		public void notifyObservers() {
-			setChanged();
-			super.notifyObservers();
-		}
-
-		@Override
-		public void notifyObservers(Object arg) {
-			setChanged();
-			super.notifyObservers(arg);
-		}
-	};
+	public final Observable observable = new ChangedObservable();
 
 	public static final int MTU = 332;
 	public static final int RAW_MTU = 338;

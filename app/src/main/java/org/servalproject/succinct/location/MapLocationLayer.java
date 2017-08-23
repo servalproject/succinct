@@ -19,7 +19,14 @@ import org.mapsforge.map.layer.Layers;
 import org.mapsforge.map.layer.overlay.Circle;
 import org.mapsforge.map.layer.overlay.Marker;
 import org.mapsforge.map.model.MapViewPosition;
-import org.servalproject.succinct.location.LocationService.LocationBroadcastReceiver;
+import org.servalproject.succinct.App;
+import org.servalproject.succinct.networking.PeerId;
+import org.servalproject.succinct.storage.RecordIterator;
+import org.servalproject.succinct.storage.StorageWatcher;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Created by kieran on 25/07/17.
@@ -27,16 +34,29 @@ import org.servalproject.succinct.location.LocationService.LocationBroadcastRece
 
 public class MapLocationLayer extends Layer {
     private static String TAG = "MapLocationLayer";
-    private Location lastLocation;
-    private LatLong lastLatLong;
-    private boolean locationValid = false;
     private MapViewPosition mapViewPosition;
     private final Circle radius;
-    private final Marker me;
+    private final Marker marker;
     private boolean waitingToCenter = false;
     private boolean alwaysCenter = false;
     private boolean haveDisplayModel = false;
     private Context context;
+    private MarkerLocation myLocation;
+    private HashMap<PeerId, MarkerLocation> markers = new HashMap<>();
+
+    private StorageWatcher<Location> locationWatcher;
+
+    private class MarkerLocation{
+        private final PeerId peer;
+        private final Location location;
+        private final LatLong latLong;
+
+        private MarkerLocation(PeerId peer, Location location) {
+            this.peer = peer;
+            this.location = location;
+            this.latLong = new LatLong(location.getLatitude(), location.getLongitude());
+        }
+    }
 
     public MapLocationLayer(Bitmap myLocationMarker) {
         super();
@@ -49,8 +69,8 @@ public class MapLocationLayer extends Layer {
         radiusStroke.setStrokeWidth(2f);
         radiusStroke.setStyle(Style.STROKE);
         radius = new Circle(null, 0, radiusFill, radiusStroke);
+        marker = new Marker(null, myLocationMarker, 0, 0);
 
-        me = new Marker(null, myLocationMarker, 0, 0);
     }
 
     public synchronized void center(MapViewPosition mapViewPosition, boolean fix) {
@@ -60,8 +80,8 @@ public class MapLocationLayer extends Layer {
             waitingToCenter = false;
             return;
         }
-        if (locationValid) {
-            mapViewPosition.setCenter(lastLatLong);
+        if (myLocation!=null) {
+            mapViewPosition.setCenter(myLocation.latLong);
             waitingToCenter = false;
             if (haveDisplayModel) {
                 requestRedraw();
@@ -85,11 +105,33 @@ public class MapLocationLayer extends Layer {
      */
     public void activate(Context context) {
         Log.d(TAG, "activate");
-        this.context = context;
-        if (context != null) {
-            locationBroadcastReceiver.register(context);
+        if (locationWatcher == null){
+            final App app = (App)context.getApplicationContext();
+            locationWatcher = new StorageWatcher<Location>(app.teamStorage, LocationFactory.factory) {
+                @Override
+                protected void Visit(PeerId peer, RecordIterator<Location> records) throws IOException {
+                    // We only need the last location for each peer
+                    records.end();
+                    if (records.prev()) {
+                        MarkerLocation l = new MarkerLocation(peer, records.read());
+                        markers.put(peer, l);
+                        if (app.networks.myId.equals(peer)){
+                            myLocation = l;
+                            if (waitingToCenter || alwaysCenter){
+                                mapViewPosition.setCenter(l.latLong);
+                                waitingToCenter = false;
+                            }
+                        }
+                        if (haveDisplayModel)
+                            requestRedraw();
+                    }
+                }
+            };
         }
-        locationBroadcastReceiver.onEnabled();
+        markers.clear();
+        locationWatcher.activate();
+
+        this.context = context;
     }
 
     /**
@@ -97,10 +139,8 @@ public class MapLocationLayer extends Layer {
      */
     public void deactivate() {
         Log.d(TAG, "deactivate");
-        if (context != null) {
-            locationBroadcastReceiver.unregister(context);
-        }
-        locationBroadcastReceiver.onDisabled();
+        locationWatcher.deactivate();
+        markers.clear();
     }
 
     /**
@@ -111,7 +151,7 @@ public class MapLocationLayer extends Layer {
     public synchronized void addToLayers(Layers layers) {
         layers.add(this);
         radius.setDisplayModel(getDisplayModel());
-        me.setDisplayModel(getDisplayModel());
+        marker.setDisplayModel(getDisplayModel());
         haveDisplayModel = true;
     }
 
@@ -123,35 +163,18 @@ public class MapLocationLayer extends Layer {
         addToLayers(map.getLayerManager().getLayers());
     }
 
-    public synchronized void setLocation(Location location) {
-        // todo we might want to turn off the location marker with setLocation(null)?
-        if (location == null) return;
-        lastLocation = location;
-        lastLatLong = new LatLong(location.getLatitude(), location.getLongitude());
-        radius.setLatLong(lastLatLong);
-        me.setLatLong(lastLatLong);
-
-        float accuracy = location.getAccuracy();
-        if (accuracy == 0) accuracy = 40;
-        radius.setRadius(accuracy);
-
-        locationValid = true;
-
-        if (waitingToCenter || alwaysCenter) {
-            mapViewPosition.setCenter(lastLatLong);
-            waitingToCenter = false;
-        }
-
-        if (haveDisplayModel) {
-            requestRedraw();
-        }
-    }
-
     @Override
     public synchronized void draw(BoundingBox boundingBox, byte zoomLevel, Canvas canvas, Point topLeftPoint) {
-        if (haveDisplayModel && locationValid) {
+        for(Map.Entry<PeerId, MarkerLocation> e : markers.entrySet()){
+            MarkerLocation l = e.getValue();
+            this.radius.setLatLong(l.latLong);
+            float accuracy = l.location.getAccuracy();
+            if (accuracy == 0)
+                accuracy = 40;
+            this.radius.setRadius(accuracy);
+            this.marker.setLatLong(l.latLong);
             this.radius.draw(boundingBox, zoomLevel, canvas, topLeftPoint);
-            this.me.draw(boundingBox, zoomLevel, canvas, topLeftPoint);
+            this.marker.draw(boundingBox, zoomLevel, canvas, topLeftPoint);
         }
     }
 
@@ -160,35 +183,8 @@ public class MapLocationLayer extends Layer {
         Log.d(TAG, "onDestroy");
         haveDisplayModel = false;
         radius.onDestroy();
-        me.onDestroy();
-        if (context != null) {
-            locationBroadcastReceiver.unregister(context);
-        }
+        marker.onDestroy();
         super.onDestroy();
     }
 
-    private final LocationBroadcastReceiver locationBroadcastReceiver = new LocationBroadcastReceiver() {
-        @Override
-        public void onDisabled() {
-            Log.d(TAG, "location broadcast receiver onDisabled");
-            synchronized (MapLocationLayer.this) {
-                locationValid = false;
-                if (haveDisplayModel) {
-                    requestRedraw();
-                }
-            }
-        }
-
-        @Override
-        public void onEnabled() {
-            Log.d(TAG, "location broadcast receiver onEnabled");
-        }
-
-        @Override
-        public void onNewLocation(Location location) {
-            Log.d(TAG, "onNewLocation " + location);
-            if (location == null) return;
-            setLocation(location);
-        }
-    };
 }

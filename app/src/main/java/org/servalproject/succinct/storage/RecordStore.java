@@ -1,22 +1,24 @@
 package org.servalproject.succinct.storage;
 
 import org.servalproject.succinct.networking.Hex;
-import org.servalproject.succinct.networking.Networks;
+import org.servalproject.succinct.utils.ChangedObservable;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.ProtocolException;
 import java.nio.ByteBuffer;
+import java.util.Observable;
 
 public class RecordStore {
-	private final String filename;
+	final File filename;
 	private final Storage store;
 	private final RandomAccessFile file;
-	public long EOF=0;
+	public long EOF=-1;
 	private long appendOffset;
 	private long ptr;
 	public PeerTransfer activeTransfer;
+	public final Observable observable = new ChangedObservable();
 
 	private native long open(long storePtr, String relativePath);
 	private native void append(long filePtr, byte[] bytes, int offset, int length);
@@ -25,10 +27,9 @@ public class RecordStore {
 
 	RecordStore(Storage storage, String relativePath) throws IOException {
 		this.store = storage;
-		this.filename = relativePath;
-		File f = new File(storage.root, relativePath);
-		f.getParentFile().mkdirs();
-		this.file = new RandomAccessFile(f, "rw");
+		this.filename = new File(storage.root, relativePath);
+		filename.getParentFile().mkdirs();
+		this.file = new RandomAccessFile(filename, "rw");
 		ptr = open(storage.ptr, relativePath);
 		if (ptr==0)
 			throw new IllegalStateException("file open failed");
@@ -48,8 +49,12 @@ public class RecordStore {
 
 	// called from JNI on open or flush success / failure
 	private void jniCallback(long length){
+		boolean notify = EOF == -1;
 		appendOffset = EOF = length;
-		// TODO observer callbacks after syncing changes?
+		if (notify) {
+			observable.notifyObservers();
+			store.fileFlushed(this);
+		}
 	}
 
 	public synchronized void readBytes(long offset, byte[] bytes) throws IOException {

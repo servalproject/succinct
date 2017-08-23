@@ -1,18 +1,16 @@
 package org.servalproject.succinct;
 
-import android.content.Context;
+import android.app.Fragment;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.app.Fragment;
 import android.os.Environment;
-import android.support.v4.content.ContextCompat;
+import android.support.graphics.drawable.VectorDrawableCompat;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
 import org.mapsforge.core.graphics.Bitmap;
-import org.mapsforge.core.model.LatLong;
 import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
 import org.mapsforge.map.android.util.AndroidUtil;
 import org.mapsforge.map.android.view.MapView;
@@ -74,20 +72,21 @@ public class MapFragment extends Fragment {
             tileRendererLayer.setXmlRenderTheme(InternalRenderTheme.DEFAULT);
 
             map.getLayerManager().getLayers().add(tileRendererLayer);
-            map.setCenter(new LatLong(-34.9285, 138.6007));
-            map.setZoomLevel((byte) 16);
-
-            Drawable drawable = ContextCompat.getDrawable(getActivity(), R.drawable.marker_mylocation);
-            Bitmap bitmap = AndroidGraphicFactory.convertToBitmap(drawable);
-            MapLocationLayer mapLocationLayer = new MapLocationLayer(bitmap);
-            mapLocationLayer.addToMap(map);
-            mapLocationLayer.center(map, true);
-            LocationService locationService = mainActivity.getLocationService();
-            if (locationService != null) {
-                mapLocationLayer.setLocation(locationService.getLastLocation());
-            }
-            mapLocationLayer.activate(mainActivity);
+            mapDataStore.boundingBox();
+            map.setCenter(mapDataStore.boundingBox().getCenterPoint());
+            map.setZoomLevel(mapDataStore.startZoomLevel());
         }
+
+        Drawable drawable = //ContextCompat.getDrawable(getActivity(), R.drawable.marker_mylocation);
+        VectorDrawableCompat.create(getResources(), R.drawable.marker_mylocation, null);
+
+        Bitmap bitmap = AndroidGraphicFactory.convertToBitmap(drawable);
+        MapLocationLayer mapLocationLayer = new MapLocationLayer(bitmap);
+        mapLocationLayer.addToMap(map);
+        mapLocationLayer.center(map, true);
+        LocationService locationService = mainActivity.getLocationService();
+        mapLocationLayer.activate(mainActivity);
+
         return view;
     }
 

@@ -15,6 +15,11 @@ import android.support.annotation.Nullable;
 import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 
+import org.servalproject.succinct.App;
+import org.servalproject.succinct.storage.RecordIterator;
+
+import java.io.IOException;
+
 /**
  * Created by kieran on 21/07/17.
  */
@@ -32,6 +37,7 @@ public class LocationService extends Service {
     private long minTimePassive = 10 * 1000;
     private float minDistance = 0f;
     private boolean gpsEnabled = false;
+    private RecordIterator<Location> iterator;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -96,19 +102,28 @@ public class LocationService extends Service {
         super.onCreate();
         Log.d(TAG, "onCreate");
 
+        try {
+            App app = (App) getApplication();
+            iterator = app.teamStorage.openIterator(LocationFactory.factory, app.networks.myId);
+            iterator.end();
+            // reload our last location
+            if (iterator.prev())
+                lastLocation = iterator.read();
+        } catch (IOException e) {
+            Log.e(TAG, e.getMessage(), e);
+        }
+
         locationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
         try {
-            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                gpsEnabled = true;
-            }
-            // fixme need to discard last known location if stale (for some value of stale)
-            lastLocation = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
+            gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+            // Perhaps there was a location update we missed?
+            updateLocation(locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER));
             Log.d(TAG, "getLastKnownLocation (GPS) " + lastLocation);
             Log.d(TAG, "onCreate registering for GPS updates every " + minTime + " ms, or " + minDistance + " m");
             locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, minTime, minDistance, locationListener);
             locationManager.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER, minTimePassive, minDistance, locationListener);
         } catch (SecurityException e) {
-            Log.e(TAG, e.getMessage());
+            Log.e(TAG, e.getMessage(), e);
             stopSelf();
         }
     }
@@ -123,20 +138,31 @@ public class LocationService extends Service {
         }
     }
 
-    private boolean shouldReplaceLastLocation(Location newLocation) {
+    private void updateLocation(Location newLocation){
+        if (newLocation==null)
+            return;
+
+        // ignore NULL island
+        // TODO better test?
+        if (newLocation.getLatitude() == 0 && newLocation.getLongitude() == 0)
+            return;
+
         // todo logic with accuracy and timing to determine if new location should be used
-        return (newLocation != null);
+        try {
+            iterator.append(newLocation);
+            lastLocation = newLocation;
+            LocalBroadcastManager.getInstance(LocationService.this).sendBroadcast(
+                    new Intent(GPS_STATUS).putExtra(GPS_STATUS_EXTRA_LOCATION, newLocation));
+        } catch (IOException e) {
+            Log.e(TAG, e.getMessage(), e);
+        }
     }
 
     private final LocationListener locationListener = new LocationListener() {
         @Override
         public void onLocationChanged(Location location) {
             Log.d(TAG, "onLocationChanged " + location.toString());
-            if (shouldReplaceLastLocation(location)) {
-                lastLocation = location;
-                LocalBroadcastManager.getInstance(LocationService.this).sendBroadcast(
-                        new Intent(GPS_STATUS).putExtra(GPS_STATUS_EXTRA_LOCATION, location));
-            }
+            updateLocation(location);
         }
 
         @Override

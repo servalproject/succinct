@@ -170,8 +170,6 @@ public class Networks {
 			return;
 		}
 
-		//Log.v(TAG, "Received "+(hdr.unicast?"unicast":"broadcast")+" from "+addr);
-
 		PeerSocketLink link = (PeerSocketLink) peer.networkLinks.get(addr);
 		if (link == null){
 			Log.v(TAG, "New peer link from "+addr);
@@ -204,7 +202,6 @@ public class Networks {
 			link.lastAckTime = SystemClock.elapsedRealtime();
 			link.ackedUnicast = linkAck.unicast;
 			link.ackedBroadcast = linkAck.broadcast;
-			//Log.v(TAG, "link acked "+link.addr+" "+link.theyAckedBroadcast()+", "+link.theyAckedUnicast());
 		}
 	}
 
@@ -212,20 +209,14 @@ public class Networks {
 	private AlarmManager.OnAlarmListener listener=null;
 	private long nextAlarm=-1;
 	public void setAlarm(int delay){
-		//Log.v(TAG, "Set alarm in "+delay);
-		if (networks.isEmpty() || !backgroundEnabled) {
-			//Log.v(TAG, "No enabled network");
+		if (networks.isEmpty() || !backgroundEnabled)
 			return;
-		}
 
 		long newAlarm = SystemClock.elapsedRealtime()+delay;
 		// Don't delay an alarm that has already been set
-		if (nextAlarm!=-1 && newAlarm > nextAlarm) {
-			//Log.v(TAG, "Alarm already set");
+		if (nextAlarm!=-1 && newAlarm > nextAlarm)
 			return;
-		}
 
-		//cancelAlarm();
 		nextAlarm = newAlarm;
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
 			if (listener == null){
@@ -258,21 +249,16 @@ public class Networks {
 						alarmIntent);
 			}
 		}
-		//Log.v(TAG, "Alarm set for "+newAlarm);
 	}
 
 	private void cancelAlarm(){
 		nextAlarm = -1;
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-			if (listener!=null) {
+			if (listener!=null)
 				am.cancel(listener);
-				//Log.v(TAG, "Alarm cancelled");
-			}
 		}else{
-			if (alarmIntent!=null) {
+			if (alarmIntent!=null)
 				am.cancel(alarmIntent);
-				//Log.v(TAG, "Alarm cancelled");
-			}
 			alarmIntent = null;
 		}
 	}
@@ -354,7 +340,6 @@ public class Networks {
 
 	public void onAlarm() {
 		nextAlarm = -1;
-		//Log.v(TAG, "Alarm!");
 		if (backgroundEnabled && !networks.isEmpty()) {
 			trimDead();
 
@@ -384,7 +369,6 @@ public class Networks {
 
 			buff.flip();
 			for (IPInterface i : networks) {
-				//Log.v(TAG, "Sending heartbeat ["+dump(buff)+"] to " + i);
 				try {
 					dgram.send(buff, new InetSocketAddress(i.broadcastAddress, PORT));
 				} catch (SecurityException se) {
@@ -411,7 +395,6 @@ public class Networks {
 
 				buff.flip();
 
-				//Log.v(TAG, "Sending unicast heartbeat ["+dump(buff)+"] to " + link.addr);
 				try {
 					dgram.send(buff, link.addr);
 				} catch (SecurityException se) {

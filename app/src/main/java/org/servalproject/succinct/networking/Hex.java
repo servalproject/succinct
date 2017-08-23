@@ -21,6 +21,13 @@ public class Hex {
 		return new String(output);
 	}
 
+	public static boolean isHex(String hex){
+		for(int i=0;i<hex.length();i++)
+			if (Character.digit(hex.charAt(i),16)==-1)
+				return false;
+		return true;
+	}
+
 	public static byte[] fromString(String hex){
 		int len = hex.length();
 		byte[] ret = new byte[len/2];
