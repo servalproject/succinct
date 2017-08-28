@@ -36,6 +36,10 @@ public class Serialiser {
 		buff.put(value, offset, length);
 	}
 
+	public void putRawLong(long value){
+		buff.putLong(value);
+	}
+
 	public void putLong(long value){
 		while(true){
 			if ((value & ~0x7f) !=0) {

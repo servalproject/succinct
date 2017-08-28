@@ -20,6 +20,7 @@ public class LocationFactory implements Factory<Location>{
 	public Location create(DeSerialiser serialiser) {
 		byte flags = serialiser.getByte();
 		Location ret = new Location(serialiser.getString());
+		ret.setTime(serialiser.getLong());
 		ret.setLatitude(serialiser.getDouble());
 		ret.setLongitude(serialiser.getDouble());
 		if ((flags & 1)!=0)
@@ -54,6 +55,7 @@ public class LocationFactory implements Factory<Location>{
 			flags|=8;
 		serialiser.putByte(flags);
 		serialiser.putString(obj.getProvider());
+		serialiser.putRawLong(obj.getTime());
 		serialiser.putDouble(obj.getLatitude());
 		serialiser.putDouble(obj.getLongitude());
 		if (obj.hasAccuracy())

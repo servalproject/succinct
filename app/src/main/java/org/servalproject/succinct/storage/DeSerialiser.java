@@ -31,6 +31,10 @@ public class DeSerialiser {
 		return bytes;
 	}
 
+	public long getRawLong(){
+		return buff.getLong();
+	}
+
 	public long getLong(){
 		long ret=0;
 		int shift=0;
