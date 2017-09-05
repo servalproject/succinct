@@ -15,6 +15,7 @@ import org.mapsforge.map.android.graphics.AndroidGraphicFactory;
 import org.mapsforge.map.android.util.AndroidUtil;
 import org.mapsforge.map.android.view.MapView;
 import org.mapsforge.map.datastore.MapDataStore;
+import org.mapsforge.map.datastore.MultiMapDataStore;
 import org.mapsforge.map.layer.cache.TileCache;
 import org.mapsforge.map.layer.renderer.TileRendererLayer;
 import org.mapsforge.map.reader.MapFile;
@@ -25,8 +26,6 @@ import org.servalproject.succinct.location.MapLocationLayer;
 import java.io.File;
 
 public class MapFragment extends Fragment {
-
-    private static final String MAP_FILE = "succinct/australia.map";
 
     public MapFragment() {
         // Required empty public constructor
@@ -64,21 +63,29 @@ public class MapFragment extends Fragment {
         });
 
         // tile renderer layer
-        File mapFile = new File(Environment.getExternalStorageDirectory(), MAP_FILE);
-        if (mapFile.isFile()) {
-            MapDataStore mapDataStore = new MapFile(mapFile);
-            TileRendererLayer tileRendererLayer = new TileRendererLayer(tileCache, mapDataStore,
-                    map.getModel().mapViewPosition, AndroidGraphicFactory.INSTANCE);
-            tileRendererLayer.setXmlRenderTheme(InternalRenderTheme.DEFAULT);
+        MultiMapDataStore store = new MultiMapDataStore(MultiMapDataStore.DataPolicy.RETURN_ALL);
 
-            map.getLayerManager().getLayers().add(tileRendererLayer);
-            mapDataStore.boundingBox();
-            map.setCenter(mapDataStore.boundingBox().getCenterPoint());
-            map.setZoomLevel(mapDataStore.startZoomLevel());
+        // combine all /sdcard/succinct/*.map
+        File maps = new File(Environment.getExternalStorageDirectory(), "succinct");
+        boolean first=true;
+        for(File mapFile : maps.listFiles()){
+            if (mapFile.isFile() && mapFile.getName().endsWith(".map")){
+                boolean defaults = first || mapFile.getName().contains("world");
+                store.addMapDataStore(new MapFile(mapFile), defaults, defaults);
+                first = false;
+            }
         }
 
-        Drawable drawable = //ContextCompat.getDrawable(getActivity(), R.drawable.marker_mylocation);
-        VectorDrawableCompat.create(getResources(), R.drawable.marker_mylocation, null);
+        TileRendererLayer tileRendererLayer = new TileRendererLayer(tileCache, store,
+                map.getModel().mapViewPosition, AndroidGraphicFactory.INSTANCE);
+        tileRendererLayer.setXmlRenderTheme(InternalRenderTheme.DEFAULT);
+
+        map.getLayerManager().getLayers().add(tileRendererLayer);
+        map.setZoomLevelMin((byte) 4);
+        map.setCenter(store.startPosition());
+        map.setZoomLevel(store.startZoomLevel());
+
+        Drawable drawable = VectorDrawableCompat.create(getResources(), R.drawable.marker_mylocation, null);
 
         Bitmap bitmap = AndroidGraphicFactory.convertToBitmap(drawable);
         MapLocationLayer mapLocationLayer = new MapLocationLayer(bitmap);
