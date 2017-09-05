@@ -32,6 +32,12 @@
             </intent-filter>
         </activity>
 
+        <receiver android:name=".forms.ReceiveNewMagpiRecord" >
+            <intent-filter>
+                <action android:name="org.servalproject.succinctdata.ReceiveNewMagpiRecord" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".location.LocationService"
             android:exported="false" />

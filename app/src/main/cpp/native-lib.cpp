@@ -2,6 +2,7 @@
 #include "storage.h"
 #include "networks.h"
 #include "native-lib.h"
+#include "forms/compression.h"
 
 JavaVM* java_vm;
 
@@ -19,6 +20,9 @@ extern "C"{
             return -1;
 
         if (jni_register_networks(env) == -1)
+            return -1;
+
+        if (jni_register_compression(env) == -1)
             return -1;
 
         return JNI_VERSION_1_6;

@@ -5,6 +5,12 @@
 
 cmake_minimum_required(VERSION 3.4.1)
 
+file(GLOB_RECURSE native_src
+    "src/main/cpp/*.c"
+    "src/main/cpp/*.cpp"
+    "src/main/cpp/*.h"
+)
+
 # Creates and names a library, sets it as either STATIC
 # or SHARED, and provides the relative paths to its source code.
 # You can define multiple libraries, and CMake builds them for you.
@@ -17,20 +23,7 @@ add_library( # Sets the name of the library.
              SHARED
 
              # Provides a relative path to your source file(s).
-             src/main/cpp/native-lib.cpp
-             src/main/cpp/native-lib.h
-             src/main/cpp/hash.c
-             src/main/cpp/hash.h
-             src/main/cpp/networks.h
-             src/main/cpp/networks.cpp
-             src/main/cpp/storage.h
-             src/main/cpp/storage.cpp
-             src/main/cpp/sync_keys.h
-             src/main/cpp/sync_keys.cpp
-             src/main/cpp/lmdb/mdb.c
-             src/main/cpp/lmdb/midl.c
-             src/main/cpp/lmdb/midl.h
-             src/main/cpp/lmdb/lmdb.h )
+             ${native_src} )
 
 # Searches for a specified prebuilt library and stores the path as a
 # variable. Because CMake includes system libraries in the search path by
