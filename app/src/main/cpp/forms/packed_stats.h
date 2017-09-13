@@ -74,7 +74,7 @@ typedef struct compressed_stats_handle {
     unsigned int casestartofword3[2][2][1];
     unsigned int caseposn1[80][1];
     unsigned int caseposn2[2][80][1];
-    int messagelengths[1024];
+    unsigned int messagelengths[1024];
 
     /* Full extracted tree */
     struct node *tree;

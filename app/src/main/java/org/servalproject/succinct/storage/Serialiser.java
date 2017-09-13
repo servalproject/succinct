@@ -9,7 +9,7 @@ public class Serialiser {
 		buff = ByteBuffer.allocate(1200);
 	}
 
-	static final Charset UTF_8 = Charset.forName("UTF-8");
+	public static final Charset UTF_8 = Charset.forName("UTF-8");
 
 	public void putString(String value){
 		putBytes(value.getBytes(UTF_8));

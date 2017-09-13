@@ -2,6 +2,7 @@
 #include "compression.h"
 #include "recipe.h"
 #include "log.h"
+#include "smac.h"
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
 
@@ -108,19 +109,38 @@ static jbyteArray compress_form(JNIEnv *env, jobject object, jlong stats_ptr, jl
     return compressed;
 }
 
+static jbyteArray compress_string(JNIEnv *env, jobject object, jlong stats_ptr, jstring str) {
+    stats_handle *h = (stats_handle *) stats_ptr;
+
+    const char *string = env->GetStringUTFChars(str, NULL);
+
+    unsigned in_len = strlen(string);
+    uint8_t buff[in_len];
+    unsigned len = sizeof buff;
+
+    int r = stats3_compress(string, in_len, buff, &len, h);
+    if (r != 0) {
+        env->ReleaseStringUTFChars(str, string);
+        return NULL;
+    }
+
+    jbyteArray compressed = env->NewByteArray(len);
+    env->SetByteArrayRegion(compressed, 0, len, (const jbyte *) buff);
+
+    return compressed;
+}
+
 #define NELS(X) (sizeof(X) / sizeof(X[0]))
 
 static JNINativeMethod stats_methods[] = {
         {"openStats", "(Landroid/content/res/AssetManager;Ljava/lang/String;)J", (void*)open_stats },
-        {"closeStats", "(J)V", (void*)close_stats }
+        {"closeStats", "(J)V", (void*)close_stats },
+        {"compressString", "(JLjava/lang/String;)[B", (void*)compress_string }
 };
 
 static JNINativeMethod recipe_methods[] = {
         {"buildRecipe", "(Ljava/lang/String;)V", (void*)build_recipe },
-        {"closeRecipe", "(J)V", (void*)close_recipe }
-};
-
-static JNINativeMethod form_methods[] = {
+        {"closeRecipe", "(J)V", (void*)close_recipe },
         {"stripForm", "(JLjava/lang/String;)Ljava/lang/String;", (void*)strip_form },
         {"compressForm", "(JJLjava/lang/String;)[B", (void*)compress_form }
 };
@@ -141,13 +161,6 @@ int jni_register_compression(JNIEnv* env){
     if (env->ExceptionCheck())
         return -1;
     env->RegisterNatives(recipe, recipe_methods, NELS(recipe_methods));
-    if (env->ExceptionCheck())
-        return -1;
-
-    jclass form = env->FindClass("org/servalproject/succinct/forms/Form");
-    if (env->ExceptionCheck())
-        return -1;
-    env->RegisterNatives(form, form_methods, NELS(form_methods));
     if (env->ExceptionCheck())
         return -1;
 

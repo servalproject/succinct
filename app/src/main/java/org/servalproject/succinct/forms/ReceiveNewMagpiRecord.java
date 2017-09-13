@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 
+import org.servalproject.succinct.App;
+
 public class ReceiveNewMagpiRecord extends BroadcastReceiver {
 	private static final String ACTION="org.servalproject.succinctdata.ReceiveNewMagpiRecord";
 
@@ -12,11 +14,17 @@ public class ReceiveNewMagpiRecord extends BroadcastReceiver {
 		String action = intent.getAction();
 		if (ACTION.equals(action)){
 			//String recordUUID =  intent.getStringExtra("recordUUID");
-			String completedRecord = intent.getStringExtra("recordData");
+			final String completedRecord = intent.getStringExtra("recordData");
 			//String recordBundle = intent.getStringExtra("recordBundle");
-			String formSpecification =  intent.getStringExtra("formSpecification");
+			final String formSpecification =  intent.getStringExtra("formSpecification");
+			final Context appContext = context.getApplicationContext();
 
-			Form.compress(context, formSpecification, completedRecord);
+			App.backgroundHandler.post(new Runnable() {
+				@Override
+				public void run() {
+					Form.compress(appContext, formSpecification, completedRecord);
+				}
+			});
 		}
 	}
 }
