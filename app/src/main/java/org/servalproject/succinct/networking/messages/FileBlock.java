@@ -1,16 +1,16 @@
 package org.servalproject.succinct.networking.messages;
 
 
-import android.util.Log;
-
 import org.servalproject.succinct.networking.Peer;
+import org.servalproject.succinct.storage.DeSerialiser;
+import org.servalproject.succinct.storage.Factory;
 import org.servalproject.succinct.storage.RecordStore;
+import org.servalproject.succinct.storage.Serialiser;
 
 import java.io.IOException;
-import java.nio.BufferOverflowException;
 import java.nio.ByteBuffer;
 
-public class FileBlock extends Message{
+public class FileBlock extends Message<FileBlock>{
 	public RecordStore file;
 	public final String filename;
 	public long offset;
@@ -27,59 +27,58 @@ public class FileBlock extends Message{
 		this.file = file;
 	}
 
-	FileBlock(ByteBuffer buffer) {
+	public FileBlock(String filename, long offset, long length, byte[] data) {
 		super(Type.FileBlockMessage);
-		byte[] nameBytes = new byte[buffer.get()&0xFF];
-		buffer.get(nameBytes);
-		filename = new String(nameBytes);
-		offset = Message.getPackedLong(buffer);
-		length = buffer.remaining();
-		data = new byte[buffer.remaining()];
-		buffer.get(data);
+		this.filename = filename;
+		this.offset = offset;
+		this.length = length;
+		this.data = data;
+		this.file = null;
 	}
 
-	// abuse message write semantics, to both write some data and keep this message in the queue
-	// until all the requested data has been written
-	@Override
-	public boolean write(ByteBuffer buff) {
-		if (buff.remaining()<3)
-			return false;
-
-		try {
-			buff.mark();
-			buff.put((byte) type.ordinal());
-			int lenOffset = buff.position();
-			buff.putShort((short) 0);
-			byte[] nameBytes = filename.getBytes();
-			buff.put((byte) nameBytes.length);
-			buff.put(filename.getBytes());
-			Message.putPackedLong(buff, offset);
-
-			if (length < buff.remaining())
-				buff.limit((int) (buff.position()+length));
-
-			int read = file.readBytes(offset, buff);
-
-			int len = buff.position() - lenOffset - 2;
-			buff.putShort(lenOffset, (short) len);
-
-			length -= read;
-			offset += read;
-
-			return length == 0;
-		}catch (BufferOverflowException e){
-			buff.reset();
-			return false;
-		} catch (IOException e) {
-			Log.v(TAG, e.getMessage(), e);
-			buff.reset();
-			return false;
+	public static final Factory<FileBlock> factory = new Factory<FileBlock>() {
+		@Override
+		public String getFileName() {
+			return null;
 		}
+
+		@Override
+		public FileBlock create(DeSerialiser serialiser) {
+			String filename = serialiser.getString();
+			long offset = serialiser.getLong();
+			byte[] data = serialiser.getFixedBytes(DeSerialiser.REMAINING);
+			return new FileBlock(filename, offset, data.length, data);
+		}
+
+		@Override
+		public void serialise(Serialiser serialiser, FileBlock object) {
+			serialiser.putString(object.filename);
+			serialiser.putLong(object.offset);
+			int len = serialiser.remaining();
+			if (len > object.length)
+				len = (int) object.length;
+
+			ByteBuffer buff = serialiser.slice(len);
+
+			try {
+				int read = object.file.readBytes(object.offset, buff);
+				serialiser.skip(read);
+				object.length -= read;
+				object.offset += read;
+			} catch (IOException e) {
+				throw new IllegalStateException(e);
+			}
+		}
+	};
+
+	@Override
+	protected Factory<FileBlock> getFactory() {
+		return factory;
 	}
 
 	@Override
-	protected boolean serialise(ByteBuffer buff) {
-		return false;
+	protected boolean isComplete() {
+		return length==0;
 	}
 
 	@Override

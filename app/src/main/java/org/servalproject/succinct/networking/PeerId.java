@@ -1,5 +1,8 @@
 package org.servalproject.succinct.networking;
 
+import org.servalproject.succinct.storage.DeSerialiser;
+import org.servalproject.succinct.storage.Serialiser;
+
 import java.nio.ByteBuffer;
 import java.security.SecureRandom;
 import java.util.Arrays;
@@ -20,6 +23,9 @@ public class PeerId {
 		this.id = new byte[LEN];
 		buff.get(id);
 	}
+	public PeerId(DeSerialiser serialiser){
+		this.id = serialiser.getFixedBytes(LEN);
+	}
 	public PeerId(){
 		this.id = new byte[LEN];
 		new SecureRandom().nextBytes(id);
@@ -32,6 +38,10 @@ public class PeerId {
 
 	public void write(ByteBuffer buff){
 		buff.put(id);
+	}
+
+	public void serialise(Serialiser serialiser){
+		serialiser.putFixedBytes(id);
 	}
 
 	@Override

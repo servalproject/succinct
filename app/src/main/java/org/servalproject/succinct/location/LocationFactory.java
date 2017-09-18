@@ -6,7 +6,7 @@ import org.servalproject.succinct.storage.DeSerialiser;
 import org.servalproject.succinct.storage.Factory;
 import org.servalproject.succinct.storage.Serialiser;
 
-public class LocationFactory implements Factory<Location>{
+public class LocationFactory extends Factory<Location>{
 	private LocationFactory(){}
 
 	public static final LocationFactory factory = new LocationFactory();

@@ -3,13 +3,16 @@ package org.servalproject.succinct.networking.messages;
 import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.networking.Networks;
 import org.servalproject.succinct.networking.Peer;
+import org.servalproject.succinct.storage.DeSerialiser;
+import org.servalproject.succinct.storage.Factory;
+import org.servalproject.succinct.storage.Serialiser;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
 import static org.servalproject.succinct.networking.messages.Message.Type.StoreStateMessage;
 
-public class StoreState extends Message{
+public class StoreState extends Message<StoreState>{
 	private static final int KEY_LEN=32;
 	public final String team;
 	public final byte[] key;
@@ -22,24 +25,25 @@ public class StoreState extends Message{
 			throw new IllegalStateException("Expected len "+KEY_LEN+", got "+ key.length);
 	}
 
-	StoreState(ByteBuffer buff){
-		super(StoreStateMessage);
-		this.key = new byte[KEY_LEN];
-		buff.get(this.key);
-		byte[] tmp = new byte[buff.remaining()];
-		buff.get(tmp);
-		this.team = new String(tmp);
-	}
+	public static final Factory<StoreState> factory = new Factory<StoreState>() {
+		@Override
+		public String getFileName() {
+			return null;
+		}
 
-	@Override
-	protected boolean serialise(ByteBuffer buff) {
-		byte[] teamName = team.getBytes();
-		if (buff.remaining() < teamName.length + key.length)
-			return false;
-		buff.put(key);
-		buff.put(teamName);
-		return true;
-	}
+		@Override
+		public StoreState create(DeSerialiser serialiser) {
+			byte[] key = serialiser.getFixedBytes(KEY_LEN);
+			String team = new String(serialiser.getFixedBytes(DeSerialiser.REMAINING));
+			return new StoreState(team, key);
+		}
+
+		@Override
+		public void serialise(Serialiser serialiser, StoreState object) {
+			serialiser.putFixedBytes(object.key);
+			serialiser.putFixedBytes(object.team.getBytes());
+		}
+	};
 
 	@Override
 	public void process(Peer peer) {
@@ -49,6 +53,11 @@ public class StoreState extends Message{
 	@Override
 	public String toString() {
 		return getClass().getName()+" "+team+" " + Hex.toString(key,0,20);
+	}
+
+	@Override
+	protected Factory<StoreState> getFactory() {
+		return factory;
 	}
 
 	@Override

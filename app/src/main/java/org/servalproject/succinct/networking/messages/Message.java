@@ -1,13 +1,20 @@
 package org.servalproject.succinct.networking.messages;
 
+import android.util.Log;
+
 import org.servalproject.succinct.networking.Peer;
+import org.servalproject.succinct.storage.DeSerialiser;
+import org.servalproject.succinct.storage.Factory;
+import org.servalproject.succinct.storage.Serialiser;
 
 import java.nio.BufferOverflowException;
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 
-public abstract class Message {
+public abstract class Message<T extends Message<T>> {
 	public final Type type;
 	public static final int MTU = 1200;
+	private static final String TAG = "Message";
 
 	@Override
 	public String toString() {
@@ -29,66 +36,52 @@ public abstract class Message {
 		RequestBlockMessage,
 		FileBlockMessage,
 	}
+	private static Type[] types = Type.values();
 
 	public static Message parseMessage(ByteBuffer buff){
 		if (buff.remaining()<3)
 			return null;
 		int limit = buff.limit();
 		buff.mark();
-		Type type = Type.values()[buff.get()];
+
+		int t = buff.get();
+		if (t >= types.length)
+			throw new IllegalStateException("Unexpected type "+t);
+		Type type = types[t];
+
 		short len = buff.getShort();
 		if (len > buff.remaining()) {
 			buff.reset();
 			return null;
 		}
+
 		buff.limit(buff.position()+len);
-		ByteBuffer parseBuff = buff.slice();
-		buff.position(buff.limit());
-		buff.limit(limit);
+		try {
+			DeSerialiser serialiser = new DeSerialiser(buff);
 
-		switch (type){
-			case HeaderMessage:
-				return new Header(parseBuff);
-			case AckMessage:
-				return new Ack(parseBuff);
-			case StoreStateMessage:
-				return new StoreState(parseBuff);
-			case SyncMsgMessage:
-				return new SyncMsg(parseBuff);
-			case RequestBlockMessage:
-				return new RequestBlock(parseBuff);
-			case FileBlockMessage:
-				return new FileBlock(parseBuff);
-		}
-
-		throw new IllegalStateException("Unexpected type!");
-	}
-
-	public static long getPackedLong(ByteBuffer buff){
-		long ret=0;
-		int shift=0;
-		while(true){
-			int val = buff.get() & 0xFF;
-			ret |= (val & 0x7f)<<shift;
-			if ((val & 0x80) == 0)
-				break;
-			shift+=7;
-		}
-		return ret;
-	}
-
-	// Note, not great for negative numbers
-	public static void putPackedLong(ByteBuffer buff, long value){
-		while(true){
-			if ((value & ~0x7f) !=0) {
-				buff.put((byte) (0x80 | (value & 0x7f)));
-				value = value >>> 7;
-			}else {
-				buff.put((byte) (value & 0x7f));
-				return;
+			switch (type) {
+				case HeaderMessage:
+					return Header.factory.create(serialiser);
+				case AckMessage:
+					return Ack.factory.create(serialiser);
+				case StoreStateMessage:
+					return StoreState.factory.create(serialiser);
+				case SyncMsgMessage:
+					return SyncMsg.factory.create(serialiser);
+				case RequestBlockMessage:
+					return RequestBlock.factory.create(serialiser);
+				case FileBlockMessage:
+					return FileBlock.factory.create(serialiser);
 			}
+			throw new IllegalStateException("Unexpected type!");
+		}catch (BufferUnderflowException e){
+			Log.e(TAG, e.getMessage(), e);
+			return null;
+		}finally{
+			buff.limit(limit);
 		}
 	}
+
 	public boolean write(ByteBuffer buff){
 		if (buff.remaining()<3)
 			return false;
@@ -97,20 +90,26 @@ public abstract class Message {
 			buff.put((byte) type.ordinal());
 			int lenOffset = buff.position();
 			buff.putShort((short) 0);
-			if (!serialise(buff)) {
-				buff.reset();
-				return false;
-			}
+
+			Serialiser serialiser = new Serialiser(buff);
+			Factory<T> factory = getFactory();
+			factory.serialise(serialiser, (T)this);
+
 			int len = buff.position() - lenOffset - 2;
 			buff.putShort(lenOffset, (short) len);
-			return true;
+			return isComplete();
 		} catch (BufferOverflowException e){
 			buff.reset();
 			return false;
 		}
 	}
 
-	protected abstract boolean serialise(ByteBuffer buff);
+	protected abstract Factory<T> getFactory();
+
+	// give the sub type a chance to stay in the transmit queue
+	protected boolean isComplete(){
+		return true;
+	}
 
 	public abstract void process(Peer peer);
 }

@@ -1,6 +1,6 @@
 package org.servalproject.succinct.storage;
 
-public class BlobFactory implements Factory<byte[]>{
+public class BlobFactory extends Factory<byte[]>{
 	private final String filename;
 
 	public BlobFactory(String filename){
@@ -14,11 +14,11 @@ public class BlobFactory implements Factory<byte[]>{
 
 	@Override
 	public byte[] create(DeSerialiser serialiser) {
-		return serialiser.getBytes();
+		return serialiser.getFixedBytes(DeSerialiser.REMAINING);
 	}
 
 	@Override
 	public void serialise(Serialiser serialiser, byte[] object) {
-		serialiser.putBytes(object);
+		serialiser.putFixedBytes(object);
 	}
 }

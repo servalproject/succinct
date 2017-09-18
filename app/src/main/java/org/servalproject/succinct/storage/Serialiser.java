@@ -8,6 +8,17 @@ public class Serialiser {
 	public Serialiser(){
 		buff = ByteBuffer.allocate(1200);
 	}
+	public Serialiser(ByteBuffer buff){
+		this.buff = buff;
+	}
+
+	public int remaining(){
+		return buff.remaining();
+	}
+
+	public boolean hasRemaining(){
+		return buff.hasRemaining();
+	}
 
 	public static final Charset UTF_8 = Charset.forName("UTF-8");
 
@@ -25,6 +36,14 @@ public class Serialiser {
 
 	public void putByte(byte value){
 		buff.put(value);
+	}
+
+	public void putFixedBytes(byte[] value){
+		buff.put(value);
+	}
+
+	public void putFixedBytes(byte[] value, int offset, int length){
+		buff.put(value, offset, length);
 	}
 
 	public void putBytes(byte[] value){
@@ -50,6 +69,19 @@ public class Serialiser {
 				return;
 			}
 		}
+	}
+
+	public ByteBuffer slice(int length){
+		int l = buff.limit();
+		buff.limit(buff.position()+length);
+		ByteBuffer ret = buff.slice();
+		buff.limit(l);
+		return ret;
+	}
+
+	// after slicing, we need to know where to advance to
+	public void skip(int length){
+		buff.position(buff.position()+length);
 	}
 
 	public byte[] getResult(){

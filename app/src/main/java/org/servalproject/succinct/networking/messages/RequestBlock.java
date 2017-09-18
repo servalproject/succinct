@@ -1,10 +1,13 @@
 package org.servalproject.succinct.networking.messages;
 
 import org.servalproject.succinct.networking.Peer;
+import org.servalproject.succinct.storage.DeSerialiser;
+import org.servalproject.succinct.storage.Factory;
+import org.servalproject.succinct.storage.Serialiser;
 
 import java.nio.ByteBuffer;
 
-public class RequestBlock extends Message {
+public class RequestBlock extends Message<RequestBlock> {
 	private static final int HASH_LEN=8;
 	public final String filename;
 	public final long offset;
@@ -17,21 +20,31 @@ public class RequestBlock extends Message {
 		this.length = length;
 	}
 
-	RequestBlock(ByteBuffer buffer){
-		super(Type.RequestBlockMessage);
-		offset = Message.getPackedLong(buffer);
-		length = Message.getPackedLong(buffer);
-		byte[] nameBytes = new byte[buffer.remaining()];
-		buffer.get(nameBytes);
-		filename = new String(nameBytes);
-	}
+	public static final Factory<RequestBlock> factory = new Factory<RequestBlock>() {
+		@Override
+		public String getFileName() {
+			return null;
+		}
+
+		@Override
+		public RequestBlock create(DeSerialiser serialiser) {
+			long offset = serialiser.getLong();
+			long length = serialiser.getLong();
+			String filename = new String(serialiser.getFixedBytes(DeSerialiser.REMAINING));
+			return new RequestBlock(filename, offset, length);
+		}
+
+		@Override
+		public void serialise(Serialiser serialiser, RequestBlock object) {
+			serialiser.putLong(object.offset);
+			serialiser.putLong(object.length);
+			serialiser.putFixedBytes(object.filename.getBytes());
+		}
+	};
 
 	@Override
-	protected boolean serialise(ByteBuffer buff) {
-		Message.putPackedLong(buff, offset);
-		Message.putPackedLong(buff, length);
-		buff.put(filename.getBytes());
-		return true;
+	protected Factory<RequestBlock> getFactory() {
+		return factory;
 	}
 
 	@Override

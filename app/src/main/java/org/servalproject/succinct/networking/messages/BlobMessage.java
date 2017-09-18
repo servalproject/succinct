@@ -2,7 +2,7 @@ package org.servalproject.succinct.networking.messages;
 
 import java.nio.ByteBuffer;
 
-public abstract class BlobMessage extends Message{
+public abstract class BlobMessage<T extends BlobMessage<T>> extends Message<T>{
 	protected final byte[] blob;
 
 	BlobMessage(Type type, byte[] blob) {
@@ -22,13 +22,5 @@ public abstract class BlobMessage extends Message{
 		byte[] ret = new byte[size];
 		buffer.get(ret);
 		return ret;
-	}
-
-	@Override
-	protected boolean serialise(ByteBuffer buff) {
-		if (buff.remaining()<blob.length)
-			return false;
-		buff.put(blob);
-		return true;
 	}
 }

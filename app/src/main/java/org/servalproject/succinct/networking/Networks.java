@@ -17,6 +17,7 @@ import org.servalproject.succinct.networking.messages.Ack;
 import org.servalproject.succinct.networking.messages.Header;
 import org.servalproject.succinct.networking.messages.Message;
 import org.servalproject.succinct.networking.messages.StoreState;
+import org.servalproject.succinct.storage.Serialiser;
 
 import java.io.File;
 import java.io.IOException;
@@ -338,13 +339,14 @@ public class Networks {
 		return unicastLink;
 	}
 
-	public void onAlarm() {
+	private void onAlarm() {
 		nextAlarm = -1;
 		if (backgroundEnabled && !networks.isEmpty()) {
 			trimDead();
 
 			// assemble a broadcast heartbeat packet
 			ByteBuffer buff = ByteBuffer.allocate(MTU);
+			Serialiser serialiser = new Serialiser(buff);
 			Header hdr = new Header(myId, false);
 			hdr.write(buff);
 
@@ -359,7 +361,7 @@ public class Networks {
 				}
 			}
 			if (!ack.links.isEmpty())
-				ack.write(buff);
+				Ack.factory.serialise(ack);
 
 			StoreState state = null;
 			if (appContext.teamStorage != null)
@@ -389,7 +391,7 @@ public class Networks {
 				hdr.write(buff);
 				ack = new Ack();
 				ack.add(p, link);
-				ack.write(buff);
+				Ack.factory.serialise(ack);
 				if (state != null)
 					state.write(buff);
 

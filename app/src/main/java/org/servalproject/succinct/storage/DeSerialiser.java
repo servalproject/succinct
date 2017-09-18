@@ -7,6 +7,17 @@ public class DeSerialiser {
 	public DeSerialiser(byte[] bytes){
 		buff = ByteBuffer.wrap(bytes);
 	}
+	public DeSerialiser(ByteBuffer buff){
+		this.buff = buff;
+	}
+
+	public int remaining(){
+		return buff.remaining();
+	}
+
+	public boolean hasRemaining(){
+		return buff.hasRemaining();
+	}
 
 	public String getString(){
 		return new String(getBytes(), Serialiser.UTF_8);
@@ -24,11 +35,22 @@ public class DeSerialiser {
 		return buff.get();
 	}
 
-	public byte[] getBytes(){
-		int length = (int)getLong();
+	public static final int REMAINING = -1;
+	public byte[] getFixedBytes(int length){
+		if (length==REMAINING)
+			length = remaining();
 		byte[] bytes = new byte[length];
 		buff.get(bytes);
 		return bytes;
+	}
+
+	public void getFixedBytes(byte[] bytes){
+		buff.get(bytes);
+	}
+
+	public byte[] getBytes(){
+		int length = (int)getLong();
+		return getFixedBytes(length);
 	}
 
 	public long getRawLong(){

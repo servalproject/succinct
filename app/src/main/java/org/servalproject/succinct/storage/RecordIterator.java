@@ -45,14 +45,11 @@ public class RecordIterator<T> {
 			return null;
 		byte[] bytes = new byte[recordLength - 8];
 		store.readBytes(offset+4, bytes);
-		DeSerialiser serialiser = new DeSerialiser(bytes);
-		return factory.create(serialiser);
+		return factory.create(bytes);
 	}
 
 	public void append(T object) throws IOException {
-		Serialiser serialiser = new Serialiser();
-		factory.serialise(serialiser, object);
-		byte[] bytes = serialiser .getResult();
+		byte[] bytes = factory.serialise(object);
 		store.appendRecord(bytes);
 	}
 }
