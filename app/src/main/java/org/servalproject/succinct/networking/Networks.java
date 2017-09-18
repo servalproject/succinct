@@ -35,7 +35,7 @@ import java.util.Map;
 import java.util.Set;
 
 public class Networks {
-	private static final int PORT = 4042;
+	private static final int PORT = 4043;
 	public static final int HEARTBEAT_MS = 5000; // Network heartbeat
 	private static final String ALARM_ACTION = "org.servalproject.succinct.HEARTBEAT_ALARM";
 	private static final String TAG = "Networks";

@@ -17,6 +17,7 @@
 #define SYNC_MSG_REQ_METADATA 1
 #define SYNC_MSG_SEND_METADATA 2
 
+#define VERSION 1
 
 struct file_version{
     uint32_t version;
@@ -37,12 +38,17 @@ struct file_data{
 };
 #define PERSIST_LEN (offsetof(struct file_data, name))
 
+struct root_state{
+    uint8_t hash[crypto_hash_sha256_BYTES];
+    uint8_t version;
+};
+
 struct dbstate{
     jobject storage;
     MDB_env *env;
     MDB_dbi files;
     MDB_dbi index;
-    uint8_t root_hash[crypto_hash_sha256_BYTES];
+    struct root_state root;
     struct sync_state *sync_state;
 };
 
@@ -101,9 +107,18 @@ static int open_db(struct dbstate *state, const char *path){
     key.mv_data = (void *)"_";
     key.mv_size = 1;
 
-    if (mdb_get(txn, state->index, &key, &val) == 0 && val.mv_size == sizeof state->root_hash){
-        memcpy(state->root_hash, val.mv_data, sizeof state->root_hash);
+    if (mdb_get(txn, state->index, &key, &val) == 0){
+        if (val.mv_size == sizeof state->root)
+            memcpy(&state->root, val.mv_data, sizeof state->root);
+
+        if (state->root.version != VERSION){
+            // clear everything!
+            mdb_drop(txn, state->index, 0);
+            mdb_drop(txn, state->files, 0);
+            memset(&state->root, 0, sizeof state->root);
+        }
     }
+    state->root.version = VERSION;
 
     if (mdb_txn_commit(txn) != 0){
         LOGIF("mdb_txn_commit failed");
@@ -329,7 +344,7 @@ static int file_flush(struct dbstate *state, struct file_data *file, const uint8
     MDB_val val;
     struct file_version new_version;
     struct file_data new_data;
-    uint8_t new_root[crypto_hash_sha256_BYTES];
+    struct root_state new_root;
 
     if (file->length == file->new_length)
         return 0;
@@ -379,11 +394,12 @@ static int file_flush(struct dbstate *state, struct file_data *file, const uint8
 
     // XOR the old and new hash with the root hash
     for (unsigned i = 0; i < sizeof new_root; i++)
-        new_root[i] = state->root_hash[i] ^ new_data.hash[i] ^ file->hash[i];
+        new_root.hash[i] = state->root.hash[i] ^ new_data.hash[i] ^ file->hash[i];
+    new_root.version = VERSION;
 
     key.mv_data = (void *) "_";
     key.mv_size = 1;
-    val.mv_data = new_root;
+    val.mv_data = &new_root;
     val.mv_size = sizeof new_root;
 
     if (mdb_put(txn, state->index, &key, &val, 0) != 0) {
@@ -397,7 +413,7 @@ static int file_flush(struct dbstate *state, struct file_data *file, const uint8
     }
 
     // Now we can and must update the state of the file
-    memcpy(state->root_hash, new_root, sizeof new_root);
+    memcpy(&state->root, &new_root, sizeof new_root);
     *file = new_data;
 
     if (state->sync_state) {
@@ -418,8 +434,8 @@ rewind:
 }
 
 static void storage_callback(JNIEnv *env, struct dbstate *state){
-    jbyteArray root = env->NewByteArray(sizeof state->root_hash);
-    env->SetByteArrayRegion(root, 0, sizeof state->root_hash, (const jbyte *) state->root_hash);
+    jbyteArray root = env->NewByteArray(sizeof state->root.hash);
+    env->SetByteArrayRegion(root, 0, sizeof state->root.hash, (const jbyte *) state->root.hash);
     env->CallVoidMethod(state->storage, jni_store_callback, root);
     env->DeleteLocalRef(root);
 }
