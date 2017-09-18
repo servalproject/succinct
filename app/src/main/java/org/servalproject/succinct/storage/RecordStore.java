@@ -1,5 +1,7 @@
 package org.servalproject.succinct.storage;
 
+import android.util.Log;
+
 import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.utils.ChangedObservable;
 
@@ -15,10 +17,11 @@ public class RecordStore {
 	private final Storage store;
 	private final RandomAccessFile file;
 	public long EOF=-1;
-	private long appendOffset;
+	private long appendOffset=0;
 	private long ptr;
 	public PeerTransfer activeTransfer;
 	public final Observable observable = new ChangedObservable();
+	private static final String TAG = "RecordStore";
 
 	private native long open(long storePtr, String relativePath);
 	private native void append(long filePtr, byte[] bytes, int offset, int length);
@@ -50,6 +53,13 @@ public class RecordStore {
 	// called from JNI on open or flush success / failure
 	private void jniCallback(long length){
 		boolean notify = EOF == -1;
+		if (appendOffset > length) {
+			try {
+				file.setLength(length);
+			} catch (IOException e) {
+				Log.e(TAG, e.getMessage(), e);
+			}
+		}
 		appendOffset = EOF = length;
 		if (notify) {
 			observable.notifyObservers();
