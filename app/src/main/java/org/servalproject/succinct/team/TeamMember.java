@@ -1,5 +1,7 @@
 package org.servalproject.succinct.team;
 
+import org.servalproject.succinct.networking.PeerId;
+
 /**
  * Created by kieran on 4/08/17.
  */
@@ -7,7 +9,7 @@ package org.servalproject.succinct.team;
 public class TeamMember {
     // fixme just a placeholder - will probably remove in future
 
-    static TeamMember myself = new TeamMember("Joe Bloggs", 24601, new Team("Team A"));
+    static TeamMember myself = new TeamMember("Joe Bloggs", 24601, new Team(PeerId.Team, "Team A"));
 
     private Team team;
     private String name;

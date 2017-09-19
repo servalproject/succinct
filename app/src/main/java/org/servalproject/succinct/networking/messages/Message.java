@@ -21,7 +21,7 @@ public abstract class Message<T extends Message<T>> {
 		return "Message "+getClass().getName();
 	}
 
-	Message(Type type){
+	protected Message(Type type){
 		this.type = type;
 	}
 
@@ -35,6 +35,7 @@ public abstract class Message<T extends Message<T>> {
 		SyncMsgMessage,
 		RequestBlockMessage,
 		FileBlockMessage,
+		TeamMessage,
 	}
 	private static Type[] types = Type.values();
 

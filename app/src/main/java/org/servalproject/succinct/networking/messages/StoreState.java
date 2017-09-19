@@ -3,6 +3,7 @@ package org.servalproject.succinct.networking.messages;
 import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.networking.Networks;
 import org.servalproject.succinct.networking.Peer;
+import org.servalproject.succinct.networking.PeerId;
 import org.servalproject.succinct.storage.DeSerialiser;
 import org.servalproject.succinct.storage.Factory;
 import org.servalproject.succinct.storage.Serialiser;
@@ -14,12 +15,12 @@ import static org.servalproject.succinct.networking.messages.Message.Type.StoreS
 
 public class StoreState extends Message<StoreState>{
 	private static final int KEY_LEN=32;
-	public final String team;
+	public final PeerId teamId;
 	public final byte[] key;
 
-	public StoreState(String team, byte[] key) {
+	public StoreState(PeerId teamId, byte[] key) {
 		super(StoreStateMessage);
-		this.team = team;
+		this.teamId = teamId;
 		this.key = key;
 		if (key.length != KEY_LEN)
 			throw new IllegalStateException("Expected len "+KEY_LEN+", got "+ key.length);
@@ -33,26 +34,23 @@ public class StoreState extends Message<StoreState>{
 
 		@Override
 		public StoreState create(DeSerialiser serialiser) {
+			PeerId team = new PeerId(serialiser);
 			byte[] key = serialiser.getFixedBytes(KEY_LEN);
-			String team = new String(serialiser.getFixedBytes(DeSerialiser.REMAINING));
 			return new StoreState(team, key);
 		}
 
 		@Override
 		public void serialise(Serialiser serialiser, StoreState object) {
+			object.teamId.serialise(serialiser);
 			serialiser.putFixedBytes(object.key);
-			serialiser.putFixedBytes(object.team.getBytes());
 		}
 	};
 
 	@Override
 	public void process(Peer peer) {
-		peer.setStoreState(this);
-	}
+		// TODO collect the set of known peer teams for UI browsing
 
-	@Override
-	public String toString() {
-		return getClass().getName()+" "+team+" " + Hex.toString(key,0,20);
+		peer.setStoreState(this);
 	}
 
 	@Override
@@ -67,13 +65,13 @@ public class StoreState extends Message<StoreState>{
 
 		StoreState that = (StoreState) o;
 
-		if (!team.equals(that.team)) return false;
+		if (!teamId.equals(that.teamId)) return false;
 		return Arrays.equals(key, that.key);
 	}
 
 	@Override
 	public int hashCode() {
-		int result = team.hashCode();
+		int result = teamId.hashCode();
 		result = 31 * result + Arrays.hashCode(key);
 		return result;
 	}

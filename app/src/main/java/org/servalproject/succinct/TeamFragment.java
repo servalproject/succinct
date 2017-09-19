@@ -151,11 +151,11 @@ public class TeamFragment extends Fragment {
                 break;
             case TEAM_STATE_ACTIVE:
                 TextView status = (TextView) view.findViewById(R.id.team_status_text);
-                status.setText(getResources().getString(R.string.team_status_in_team, me.getTeam().getName()));
+                status.setText(getResources().getString(R.string.team_status_in_team, me.getTeam().name));
                 card = view.findViewById(R.id.team_card);
                 card.setVisibility(View.VISIBLE);
                 TextView teamName = (TextView) card.findViewById(R.id.team_name);
-                teamName.setText(me.getTeam().getName());
+                teamName.setText(me.getTeam().name);
         }
         return view;
     }

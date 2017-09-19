@@ -22,6 +22,11 @@ public class Serialiser {
 
 	public static final Charset UTF_8 = Charset.forName("UTF-8");
 
+	public void putEndString(String value){
+		putFixedBytes(value.getBytes(UTF_8));
+		// TODO mark limit?
+	}
+
 	public void putString(String value){
 		putBytes(value.getBytes(UTF_8));
 	}

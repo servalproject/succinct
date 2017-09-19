@@ -39,7 +39,9 @@ public class Peer {
 
 	public void setStoreState(StoreState state){
 		// ignore store's from other teams
-		if (!appContext.teamStorage.team.equals(state.team))
+		if (appContext.teamStorage == null)
+			return;
+		if (!appContext.teamStorage.teamId.equals(state.teamId))
 			return;
 
 		if (storeState!=null && storeState.equals(state))

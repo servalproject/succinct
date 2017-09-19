@@ -23,6 +23,10 @@ public class DeSerialiser {
 		return new String(getBytes(), Serialiser.UTF_8);
 	}
 
+	public String getEndString(){
+		return new String(getFixedBytes(DeSerialiser.REMAINING), Serialiser.UTF_8);
+	}
+
 	public double getDouble(){
 		return buff.getDouble();
 	}

@@ -34,6 +34,13 @@ public class App extends Application {
 	private static final String MY_ID = "my_id";
 	private static final String TEAM_ID = "team_id";
 
+	private PeerId fromPreference(SharedPreferences prefs, String pref){
+		String id = prefs.getString(pref, null);
+		if (id==null || id.length() != PeerId.LEN*2)
+			return null;
+		return new PeerId(id);
+	}
+
 	@Override
 	public void onCreate() {
 		super.onCreate();
@@ -44,19 +51,20 @@ public class App extends Application {
 
 		try {
 			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-			String idString = prefs.getString(MY_ID, null);
-			PeerId myId;
-			if (idString == null){
+			PeerId myId = fromPreference(prefs, MY_ID);
+			if (myId == null){
 				myId = new PeerId();
 				SharedPreferences.Editor ed = prefs.edit();
 				ed.putString(MY_ID, myId.toString());
 				ed.apply();
-			}else{
-				myId = new PeerId(idString);
+			}
+			PeerId teamId = fromPreference(prefs, TEAM_ID);
+			if (teamId == null){
+				// for testing there is a default team, and you are in it.
+				teamId = PeerId.Team;
 			}
 
-			// for now there is one team, and you are in it.
-			teamStorage = new Storage(this, "team");
+			teamStorage = new Storage(this, teamId);
 			networks = Networks.init(this, myId);
 		} catch (java.io.IOException e) {
 			throw new IllegalStateException("");

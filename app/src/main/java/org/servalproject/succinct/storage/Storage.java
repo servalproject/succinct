@@ -17,7 +17,7 @@ import java.util.Observable;
 
 public class Storage {
 	private final App appContext;
-	public final String team;
+	public final PeerId teamId;
 	private StoreState state;
 	final File root;
 	public long ptr;
@@ -28,10 +28,10 @@ public class Storage {
 
 	private static final String TAG = "Storage";
 
-	public Storage(App appContext, String team){
+	public Storage(App appContext, PeerId teamId){
 		this.appContext = appContext;
-		this.team = team;
-		this.root = appContext.getExternalFilesDir(team);
+		this.teamId = teamId;
+		this.root = appContext.getExternalFilesDir(teamId.toString());
 		ptr = open(root.getAbsolutePath());
 		if (ptr==0)
 			throw new IllegalStateException("storage open failed");
@@ -42,7 +42,7 @@ public class Storage {
 	}
 
 	private void jniCallback(byte[] rootHash){
-		state = new StoreState(team, rootHash);
+		state = new StoreState(teamId, rootHash);
 		if (appContext.networks!=null)
 			appContext.networks.setAlarm(10);
 	}

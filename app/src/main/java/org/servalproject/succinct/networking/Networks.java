@@ -163,8 +163,10 @@ public class Networks {
 	private void process(IPInterface network, SocketAddress addr, ByteBuffer buff) {
 		// first message should always be a Header
 		Header hdr = (Header)Message.parseMessage(buff);
-		if (hdr == null)
-			throw new IllegalStateException("Must have a header?");
+		if (hdr == null) {
+			Log.w(TAG, "Unable to parse header!");
+			return;
+		}
 		Peer peer = getPeer(hdr.id);
 		if (peer == null) {
 			// TODO double check that the packet came from one of our interfaces?

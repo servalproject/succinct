@@ -9,11 +9,13 @@ import java.util.Arrays;
 
 public class PeerId {
 	// How long does an ID need to be?
-	public static final int LEN=4;
+	public static final int LEN=8;
 	private final byte[] id;
 
 	public PeerId(String value){
 		id = Hex.fromString(value);
+		if (id.length!=LEN)
+			throw new IllegalStateException("Unexpected length!");
 	}
 
 	PeerId(byte[] bytes){
@@ -29,6 +31,15 @@ public class PeerId {
 	public PeerId(){
 		this.id = new byte[LEN];
 		new SecureRandom().nextBytes(id);
+	}
+
+	// team level content needs to be saved somewhere predictable
+	public static final PeerId Team;
+
+	static{
+		byte[] id = new byte[LEN];
+		id[0] = 1;
+		Team = new PeerId(id);
 	}
 
 	@Override
