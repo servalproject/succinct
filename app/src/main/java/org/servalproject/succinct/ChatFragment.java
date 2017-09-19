@@ -25,6 +25,7 @@ import org.servalproject.succinct.chat.ChatDatabase.ChatMessage;
 import org.servalproject.succinct.chat.ChatDatabase.ChatMessageCursor;
 import org.servalproject.succinct.team.TeamMember;
 
+import java.io.IOException;
 import java.util.Date;
 
 
@@ -33,6 +34,7 @@ public class ChatFragment extends Fragment implements LoaderManager.LoaderCallba
     private ChatAdapter adapter;
     private EditText input;
     private Button sendButton;
+    private App app;
 
     public ChatFragment() {
         // Required empty public constructor
@@ -44,6 +46,7 @@ public class ChatFragment extends Fragment implements LoaderManager.LoaderCallba
         //noinspection StatementWithEmptyBody
         if (getArguments() != null) {
         }
+        app = (App)getActivity().getApplication();
     }
 
     @Override
@@ -79,8 +82,15 @@ public class ChatFragment extends Fragment implements LoaderManager.LoaderCallba
             protected Void doInBackground(String... strings) {
                 ChatMessage msg = new ChatMessage();
                 msg.type = ChatDatabase.TYPE_MESSAGE;
-                msg.sender = TeamMember.getMyself().getName();
-                msg.senderId = TeamMember.getMyself().getId();
+
+                try {
+                    TeamMember me = app.getMe();
+                    msg.sender = me.name;
+                    msg.senderId = me.employeeId;
+                }catch (IOException e){
+                    throw new IllegalStateException(e);
+                }
+
                 msg.message = s;
                 msg.time = new Date();
                 msg.isRead = true;

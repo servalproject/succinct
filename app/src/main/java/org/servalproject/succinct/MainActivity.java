@@ -8,11 +8,13 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -319,12 +321,15 @@ public class MainActivity extends AppCompatActivity
     }
 
     protected void updateIdentity() {
-        TeamMember me = TeamMember.getMyself();
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        String myName = prefs.getString(App.MY_NAME, null);
+        int myId = prefs.getInt(App.MY_EMPLOYEE_ID, -1);
+
         TextView name = (TextView) navHeader.findViewById(R.id.nav_name);
         TextView id = (TextView) navHeader.findViewById(R.id.nav_id);
-        if (me.isValid()) {
-            name.setText(me.getName());
-            String idString = getResources().getString(R.string.id) + " " + me.getId();
+        if (myName!=null) {
+            name.setText(myName);
+            String idString = getResources().getString(R.string.id) + " " + myId;
             id.setText(idString);
         } else {
             name.setText(null);

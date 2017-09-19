@@ -1,8 +1,10 @@
 package org.servalproject.succinct;
 
 
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.app.Fragment;
+import android.preference.PreferenceManager;
 import android.support.annotation.IntDef;
 import android.support.design.widget.TextInputEditText;
 import android.text.Editable;
@@ -16,11 +18,12 @@ import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import org.servalproject.succinct.networking.PeerId;
 import org.servalproject.succinct.team.Team;
-import org.servalproject.succinct.team.TeamMember;
 import org.servalproject.succinct.utils.AndroidObserver;
 import org.servalproject.succinct.utils.HtmlCompat;
 
+import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Collection;
@@ -44,6 +47,7 @@ public class TeamFragment extends Fragment {
     private Button saveButton;
     private Button editButton;
     private App app;
+    private SharedPreferences prefs;
 
     @TeamState int state;
 
@@ -61,11 +65,16 @@ public class TeamFragment extends Fragment {
 
         app = (App)getActivity().getApplication();
 
-        TeamMember me = TeamMember.getMyself();
-        if (me.isValid()) {
-            state = TEAM_STATE_SCANNING;
-        } else {
+        prefs = PreferenceManager.getDefaultSharedPreferences(getActivity());
+        String name = prefs.getString(App.MY_NAME, null);
+        int employeeId = prefs.getInt(App.MY_EMPLOYEE_ID, -1);
+
+        if (app.teamStorage!=null){
+            state = TEAM_STATE_ACTIVE;
+        }else if (!isValidIdentity(name, employeeId)){
             state = TEAM_STATE_EDITING_ID;
+        } else {
+            state = TEAM_STATE_SCANNING;
         }
     }
 
@@ -74,9 +83,10 @@ public class TeamFragment extends Fragment {
                              Bundle savedInstanceState) {
         // Inflate the layout for this fragment
         View view = inflater.inflate(R.layout.fragment_team, container, false);
-        TeamMember me = TeamMember.getMyself();
-        String name = me.getName();
-        int id = me.getId();
+
+        String name = prefs.getString(App.MY_NAME, null);
+        int employeeId = prefs.getInt(App.MY_EMPLOYEE_ID, -1);
+
         View card;
 
         // need to initialise EditText fields regardless of state, because views can save state between fragment detach/attach
@@ -92,9 +102,8 @@ public class TeamFragment extends Fragment {
         }
         if (localEditID != editID) {
             editID = localEditID;
-            if (id > 0) {
-                String idText = "" + id;
-                editID.setText(idText);
+            if (employeeId > 0) {
+                editID.setText(Integer.toString(employeeId));
             }
             editID.addTextChangedListener(textWatcherIdentity);
         }
@@ -145,7 +154,7 @@ public class TeamFragment extends Fragment {
                 saveButton.setVisibility(View.GONE);
                 TextView identity = (TextView) card.findViewById(R.id.identity_card_text);
                 String escapedName = TextUtils.htmlEncode(name);
-                identity.setText(HtmlCompat.fromHtml(getResources().getString(R.string.identity_summary, escapedName, id)));
+                identity.setText(HtmlCompat.fromHtml(getResources().getString(R.string.identity_summary, escapedName, employeeId)));
                 card.findViewById(R.id.identity_name_layout).setVisibility(View.GONE);
                 card.findViewById(R.id.identity_id_layout).setVisibility(View.GONE);
                 card.setVisibility(View.VISIBLE);
@@ -155,19 +164,41 @@ public class TeamFragment extends Fragment {
                 ProgressBar progress = (ProgressBar) card.findViewById(R.id.team_list_progress_bar);
                 progress.setVisibility(View.VISIBLE);
                 Button join = (Button) card.findViewById(R.id.join_team_button);
-                join.setEnabled(false);
-                // TODO call app.joinTeam();
+                join.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        // TODO select team from list
+                        try {
+                            app.joinTeam(PeerId.Team);
+                            state = TEAM_STATE_ACTIVE;
+                            redraw();
+                        } catch (IOException e) {
+                            throw new IllegalStateException(e);
+                        }
+                    }
+                });
                 Button start = (Button) card.findViewById(R.id.start_new_team_button);
                 start.setEnabled(false);
                 // TODO call app.createTeam();
                 break;
             case TEAM_STATE_ACTIVE:
                 TextView status = (TextView) view.findViewById(R.id.team_status_text);
-                status.setText(getResources().getString(R.string.team_status_in_team, me.getTeam().name));
+                String myTeamName = null;
+                try {
+                    // TODO cache?
+                    Team myTeam = app.teamStorage.getLastRecord(Team.factory, PeerId.Team);
+                    if (myTeam != null)
+                        myTeamName  = myTeam.name;
+                    else
+                        myTeamName = app.teamStorage.teamId.toString();
+                }catch (IOException e){
+                    Log.e(TAG, e.getMessage(), e);
+                }
+                status.setText(getResources().getString(R.string.team_status_in_team, myTeamName));
                 card = view.findViewById(R.id.team_card);
                 card.setVisibility(View.VISIBLE);
                 TextView teamName = (TextView) card.findViewById(R.id.team_name);
-                teamName.setText(me.getTeam().name);
+                teamName.setText(myTeamName);
         }
         return view;
     }
@@ -219,9 +250,10 @@ public class TeamFragment extends Fragment {
         if (!isValidIdentity(name, id))
             throw new IllegalArgumentException();
         Log.d(TAG, "saving new identity; name=\""+name+"\", id="+id);
-        TeamMember me = TeamMember.getMyself();
-        me.setName(name);
-        me.setId(id);
+        SharedPreferences.Editor ed = prefs.edit();
+        ed.putString(App.MY_NAME, name);
+        ed.putInt(App.MY_EMPLOYEE_ID, id);
+        ed.apply();
         MainActivity activity = (MainActivity) getActivity();
         activity.updateIdentity();
     }

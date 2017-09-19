@@ -97,20 +97,33 @@ public class LocationService extends Service {
         return Service.START_STICKY;
     }
 
+    private RecordIterator<Location> getIterator(){
+		if (iterator == null){
+			try {
+				App app = (App) getApplication();
+				if (app.teamStorage!=null)
+					iterator = app.teamStorage.openIterator(LocationFactory.factory, app.networks.myId);
+			} catch (IOException e) {
+				Log.e(TAG, e.getMessage(), e);
+			}
+		}
+		return iterator;
+	}
+
     @Override
     public void onCreate() {
         super.onCreate();
         Log.d(TAG, "onCreate");
 
-        try {
-            App app = (App) getApplication();
-            iterator = app.teamStorage.openIterator(LocationFactory.factory, app.networks.myId);
-            lastLocation = iterator.readLast();
-        } catch (IOException e) {
-            Log.e(TAG, e.getMessage(), e);
-        }
+		try {
+			RecordIterator<Location> iterator =getIterator();
+			if (iterator!=null)
+				lastLocation = iterator.readLast();
+		} catch (IOException e) {
+			Log.e(TAG, e.getMessage(), e);
+		}
 
-        locationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
+		locationManager = (LocationManager) getApplicationContext().getSystemService(Context.LOCATION_SERVICE);
         try {
             gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
             // Perhaps there was a location update we missed?
@@ -146,8 +159,11 @@ public class LocationService extends Service {
 
         // todo logic with accuracy and timing to determine if new location should be used
         try {
-            iterator.append(newLocation);
-            lastLocation = newLocation;
+			RecordIterator<Location> iterator =getIterator();
+			if (iterator!=null) {
+				iterator.append(newLocation);
+				lastLocation = newLocation;
+			}
             LocalBroadcastManager.getInstance(LocationService.this).sendBroadcast(
                     new Intent(GPS_STATUS).putExtra(GPS_STATUS_EXTRA_LOCATION, newLocation));
         } catch (IOException e) {
