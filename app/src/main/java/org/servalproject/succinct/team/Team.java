@@ -10,11 +10,13 @@ import org.servalproject.succinct.storage.Serialiser;
 public class Team extends Message<Team>{
 
     public final PeerId id;
+    public final PeerId leader;
     public final String name;
 
-    public Team(PeerId id, String name) {
+    public Team(PeerId id, PeerId leader, String name) {
         super(Type.TeamMessage);
         this.id = id;
+        this.leader = leader;
         this.name = name;
     }
 
@@ -27,13 +29,15 @@ public class Team extends Message<Team>{
         @Override
         public Team create(DeSerialiser serialiser) {
             PeerId id = new PeerId(serialiser);
+            PeerId leader = new PeerId(serialiser);
             String name = serialiser.getEndString();
-            return new Team(id, name);
+            return new Team(id, leader, name);
         }
 
         @Override
         public void serialise(Serialiser serialiser, Team object) {
             object.id.serialise(serialiser);
+            object.leader.serialise(serialiser);
             serialiser.putEndString(object.name);
         }
     };
@@ -46,5 +50,10 @@ public class Team extends Message<Team>{
     @Override
     public void process(Peer peer) {
         // cache set of known teams?
+    }
+
+    @Override
+    public String toString(){
+        return id.toString()+" "+name;
     }
 }

@@ -16,11 +16,15 @@ import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.team.TeamMember;
+import org.servalproject.succinct.utils.AndroidObserver;
 import org.servalproject.succinct.utils.HtmlCompat;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Collection;
+import java.util.Observable;
 
 
 public class TeamFragment extends Fragment {
@@ -39,6 +43,7 @@ public class TeamFragment extends Fragment {
     private TextInputEditText editID;
     private Button saveButton;
     private Button editButton;
+    private App app;
 
     @TeamState int state;
 
@@ -53,6 +58,9 @@ public class TeamFragment extends Fragment {
         //noinspection StatementWithEmptyBody
         if (getArguments() != null) {
         }
+
+        app = (App)getActivity().getApplication();
+
         TeamMember me = TeamMember.getMyself();
         if (me.isValid()) {
             state = TEAM_STATE_SCANNING;
@@ -148,6 +156,10 @@ public class TeamFragment extends Fragment {
                 progress.setVisibility(View.VISIBLE);
                 Button join = (Button) card.findViewById(R.id.join_team_button);
                 join.setEnabled(false);
+                // TODO call app.joinTeam();
+                Button start = (Button) card.findViewById(R.id.start_new_team_button);
+                start.setEnabled(false);
+                // TODO call app.createTeam();
                 break;
             case TEAM_STATE_ACTIVE:
                 TextView status = (TextView) view.findViewById(R.id.team_status_text);
@@ -158,6 +170,37 @@ public class TeamFragment extends Fragment {
                 teamName.setText(me.getTeam().name);
         }
         return view;
+    }
+
+    private final AndroidObserver teamObserver = new AndroidObserver() {
+        @Override
+        public void observe(Observable observable, Object o) {
+            Team t = (Team)o;
+            // TODO add / update team in list
+            Log.v(TAG, "Team observed; "+t.toString());
+        }
+    };
+
+    private boolean observing = false;
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        if (state == TEAM_STATE_SCANNING || state == TEAM_STATE_JOINING) {
+            app.networks.teams.addObserver(teamObserver);
+            // TODO add teams to a list....
+            Collection<Team> teams = app.networks.getTeams();
+            for(Team t:teams)
+                Log.v(TAG, "Team; "+t.toString());
+            observing = true;
+        }
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (observing)
+            app.networks.teams.deleteObserver(teamObserver);
     }
 
     private void redraw() {

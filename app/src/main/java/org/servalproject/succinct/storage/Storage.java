@@ -75,6 +75,16 @@ public class Storage {
 		return new RecordIterator<>(file, factory);
 	}
 
+	public <T> void appendRecord(Factory<T> factory, PeerId peer, T record) throws IOException {
+		RecordIterator<T> iterator = openIterator(factory, peer);
+		iterator.append(record);
+	}
+
+	public <T> T getLastRecord(Factory<T> factory, PeerId peer) throws IOException {
+		RecordIterator<T> iterator = openIterator(factory, peer);
+		return iterator.readLast();
+	}
+
 	public void close(){
 		close(ptr);
 		ptr = 0;

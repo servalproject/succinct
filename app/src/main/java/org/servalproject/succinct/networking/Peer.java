@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 public class Peer {
-	private final App appContext;
+	public final App appContext;
 	public final PeerId id;
 	private StoreState storeState;
 	private long syncState=0;

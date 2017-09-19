@@ -9,7 +9,12 @@ import org.servalproject.succinct.networking.PeerId;
 public class TeamMember {
     // fixme just a placeholder - will probably remove in future
 
-    static TeamMember myself = new TeamMember("Joe Bloggs", 24601, new Team(PeerId.Team, "Team A"));
+    static TeamMember myself;
+    static{
+        PeerId team = new PeerId();
+        PeerId me = new PeerId();
+        myself = new TeamMember("Joe Bloggs", 24601, new Team(team, me, "Team A"));
+    }
 
     private Team team;
     private String name;

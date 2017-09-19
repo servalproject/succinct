@@ -8,8 +8,13 @@ import android.preference.PreferenceManager;
 
 import org.servalproject.succinct.messaging.rock.RockMessaging;
 import org.servalproject.succinct.networking.Networks;
+import org.servalproject.succinct.networking.Peer;
 import org.servalproject.succinct.networking.PeerId;
+import org.servalproject.succinct.storage.RecordIterator;
 import org.servalproject.succinct.storage.Storage;
+import org.servalproject.succinct.team.Team;
+
+import java.io.IOException;
 
 public class App extends Application {
 	public static Handler UIHandler;
@@ -59,16 +64,40 @@ public class App extends Application {
 				ed.apply();
 			}
 			PeerId teamId = fromPreference(prefs, TEAM_ID);
+			// TODO for now there is a default team, and you are in it.
 			if (teamId == null){
-				// for testing there is a default team, and you are in it.
 				teamId = PeerId.Team;
 			}
 
-			teamStorage = new Storage(this, teamId);
+			if (teamId!=null)
+				teamStorage = new Storage(this, teamId);
 			networks = Networks.init(this, myId);
 		} catch (java.io.IOException e) {
 			throw new IllegalStateException("");
 		}
+	}
+
+	public void createTeam(String name) throws IOException {
+		PeerId teamId = new PeerId();
+		Storage storage = new Storage(this, teamId);
+		storage.appendRecord(Team.factory, teamId, new Team(teamId, networks.myId, name));
+		teamStorage = storage;
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+		SharedPreferences.Editor ed = prefs.edit();
+		ed.putString(TEAM_ID, teamId.toString());
+		ed.apply();
+	}
+
+	public void joinTeam(PeerId teamId){
+		if (teamStorage!=null)
+			throw new IllegalStateException("Already in a team");
+		teamStorage = new Storage(this, teamId);
+		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+		SharedPreferences.Editor ed = prefs.edit();
+		ed.putString(TEAM_ID, teamId.toString());
+		ed.apply();
+		// trigger a heartbeat now, which should start syncing with existing peers almost immediately
+		networks.setAlarm(0);
 	}
 
 	@Override

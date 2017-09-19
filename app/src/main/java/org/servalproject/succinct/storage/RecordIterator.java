@@ -48,6 +48,13 @@ public class RecordIterator<T> {
 		return factory.create(bytes);
 	}
 
+	public T readLast() throws IOException {
+		end();
+		if (!prev())
+			return null;
+		return read();
+	}
+
 	public void append(T object) throws IOException {
 		byte[] bytes = factory.serialise(object);
 		store.appendRecord(bytes);

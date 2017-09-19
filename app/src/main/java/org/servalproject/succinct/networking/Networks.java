@@ -16,8 +16,11 @@ import org.servalproject.succinct.App;
 import org.servalproject.succinct.networking.messages.Ack;
 import org.servalproject.succinct.networking.messages.Header;
 import org.servalproject.succinct.networking.messages.Message;
+import org.servalproject.succinct.networking.messages.RequestTeam;
 import org.servalproject.succinct.networking.messages.StoreState;
 import org.servalproject.succinct.storage.Serialiser;
+import org.servalproject.succinct.team.Team;
+import org.servalproject.succinct.utils.ChangedObservable;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,10 +32,13 @@ import java.nio.channels.DatagramChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.Observable;
 import java.util.Set;
 
 public class Networks {
@@ -51,9 +57,14 @@ public class Networks {
 
 	public final Set<IPInterface> networks = new HashSet<>();
 	private final Map<PeerId, Peer> peers = new HashMap<>();
+
+	// track the set of known team id's, and which peer we should contact to ask about it
+	private HashMap<PeerId, Team> knownTeams = new HashMap<>();
+	public final Observable teams = new ChangedObservable();
+
 	private native void beginPolling();
 
-	// TODO, enabling will slowly drain battery...
+	// TODO, keeping enabled will slowly drain battery...
 	private boolean backgroundEnabled = true;
 
 	private static Networks instance;
@@ -190,11 +201,31 @@ public class Networks {
 			if (msg == null)
 				break;
 
-			if (msg.type == Message.Type.AckMessage)
-				processAck(peer, link, (Ack)msg);
-			else
-				msg.process(peer);
+			switch (msg.type){
+				case AckMessage:
+					processAck(peer, link, (Ack)msg);
+					break;
+				case StoreStateMessage:
+					processStoreState(peer, (StoreState)msg);
+					break;
+				case TeamMessage:
+					Team team = (Team)msg;
+					knownTeams.put(team.id, team);
+					teams.notifyObservers(team);
+					break;
+			}
+			msg.process(peer);
 		}
+	}
+
+	public Collection<Team> getTeams(){
+		return knownTeams.values();
+	}
+
+	private void processStoreState(Peer peer, StoreState state){
+		if (knownTeams.containsKey(state.teamId))
+			return;
+		peer.getConnection().queue(new RequestTeam(state.teamId));
 	}
 
 	private void processAck(Peer peer, PeerSocketLink link, Ack msg) {

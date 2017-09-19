@@ -105,10 +105,7 @@ public class LocationService extends Service {
         try {
             App app = (App) getApplication();
             iterator = app.teamStorage.openIterator(LocationFactory.factory, app.networks.myId);
-            iterator.end();
-            // reload our last location
-            if (iterator.prev())
-                lastLocation = iterator.read();
+            lastLocation = iterator.readLast();
         } catch (IOException e) {
             Log.e(TAG, e.getMessage(), e);
         }

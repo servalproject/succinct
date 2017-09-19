@@ -36,6 +36,7 @@ public abstract class Message<T extends Message<T>> {
 		RequestBlockMessage,
 		FileBlockMessage,
 		TeamMessage,
+		RequestTeamMessage,
 	}
 	private static Type[] types = Type.values();
 
@@ -73,6 +74,8 @@ public abstract class Message<T extends Message<T>> {
 					return RequestBlock.factory.create(serialiser);
 				case FileBlockMessage:
 					return FileBlock.factory.create(serialiser);
+				case RequestTeamMessage:
+					return RequestTeam.factory.create(serialiser);
 			}
 			throw new IllegalStateException("Unexpected type!");
 		}catch (BufferUnderflowException e){

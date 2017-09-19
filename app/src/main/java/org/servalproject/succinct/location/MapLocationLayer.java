@@ -111,9 +111,9 @@ public class MapLocationLayer extends Layer {
                 @Override
                 protected void Visit(PeerId peer, RecordIterator<Location> records) throws IOException {
                     // We only need the last location for each peer
-                    records.end();
-                    if (records.prev()) {
-                        MarkerLocation l = new MarkerLocation(peer, records.read());
+                    Location last = records.readLast();
+                    if (last!=null) {
+                        MarkerLocation l = new MarkerLocation(peer, last);
                         markers.put(peer, l);
                         if (app.networks.myId.equals(peer)){
                             myLocation = l;
