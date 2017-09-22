@@ -1,6 +1,7 @@
 package org.servalproject.succinct;
 
 
+import android.app.Activity;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.app.Fragment;
@@ -14,6 +15,8 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -128,6 +131,7 @@ public class TeamFragment extends Fragment {
                         if (!isValidIdentity(name, id)) {
                             return;
                         }
+                        hideKeyboard();
                         setIdentity(name, id);
                         state = TEAM_STATE_SCANNING;
                         redraw();
@@ -256,6 +260,15 @@ public class TeamFragment extends Fragment {
         ed.apply();
         MainActivity activity = (MainActivity) getActivity();
         activity.updateIdentity();
+    }
+
+    private void hideKeyboard() {
+        Activity activity = getActivity();
+        InputMethodManager inputMethodManager =
+                (InputMethodManager) activity.getSystemService(
+                        Activity.INPUT_METHOD_SERVICE);
+        inputMethodManager.hideSoftInputFromWindow(
+                activity.getCurrentFocus().getWindowToken(), 0);
     }
 
     private TextWatcher textWatcherIdentity = new TextWatcher() {
