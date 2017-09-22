@@ -50,7 +50,7 @@ public class RequestTeam extends Message<RequestTeam> {
 		if (app.teamStorage == null || !app.teamStorage.teamId.equals(teamId))
 			return;
 		try {
-			Team myTeam = app.teamStorage.getLastRecord(Team.factory, PeerId.Team);
+			Team myTeam = app.teamStorage.getLastRecord(Team.factory, app.teamStorage.teamId);
 			if (myTeam!=null)
 				peer.getConnection().queue(myTeam);
 		} catch (IOException e) {

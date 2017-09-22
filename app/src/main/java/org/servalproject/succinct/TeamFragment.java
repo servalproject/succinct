@@ -178,9 +178,10 @@ public class TeamFragment extends Fragment {
                     public void onClick(View view) {
                         // TODO select team from list
                         try {
-                            app.joinTeam(PeerId.Team);
+                            app.joinTeam(new PeerId("0100000000000000"));
                             state = TEAM_STATE_ACTIVE;
                             redraw();
+                            if (false) throw new IOException();
                         } catch (IOException e) {
                             throw new IllegalStateException(e);
                         }
@@ -199,7 +200,7 @@ public class TeamFragment extends Fragment {
                 String myTeamName = null;
                 try {
                     // TODO cache?
-                    Team myTeam = app.teamStorage.getLastRecord(Team.factory, PeerId.Team);
+                    Team myTeam = app.teamStorage.getLastRecord(Team.factory, app.teamStorage.teamId);
                     if (myTeam != null)
                         myTeamName  = myTeam.name;
                     else

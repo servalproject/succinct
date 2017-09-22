@@ -33,15 +33,6 @@ public class PeerId {
 		new SecureRandom().nextBytes(id);
 	}
 
-	// team level content needs to be saved somewhere predictable
-	public static final PeerId Team;
-
-	static{
-		byte[] id = new byte[LEN];
-		id[0] = 1;
-		Team = new PeerId(id);
-	}
-
 	@Override
 	public String toString() {
 		return Hex.toString(id);
