@@ -2,13 +2,17 @@ package org.servalproject.succinct;
 
 
 import android.app.Activity;
+import android.content.Context;
+import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.app.Fragment;
 import android.preference.PreferenceManager;
 import android.support.annotation.IntDef;
 import android.support.design.widget.TextInputEditText;
+import android.support.v7.app.AlertDialog;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.util.Log;
@@ -18,6 +22,7 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -182,8 +187,12 @@ public class TeamFragment extends Fragment {
                     }
                 });
                 Button start = (Button) card.findViewById(R.id.start_new_team_button);
-                start.setEnabled(false);
-                // TODO call app.createTeam();
+                start.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        showTeamCreateDialog(v.getContext());
+                    }
+                });
                 break;
             case TEAM_STATE_ACTIVE:
                 TextView status = (TextView) view.findViewById(R.id.team_status_text);
@@ -260,6 +269,51 @@ public class TeamFragment extends Fragment {
         ed.apply();
         MainActivity activity = (MainActivity) getActivity();
         activity.updateIdentity();
+    }
+
+    private void showTeamCreateDialog(Context context) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(R.string.start_new_team);
+
+        final EditText input = new EditText(context);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        input.setHint(R.string.team_name);
+        builder.setView(input);
+
+        builder.setPositiveButton("OK", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                try {
+                    app.createTeam(input.getText().toString());
+                    state = TEAM_STATE_ACTIVE;
+                    redraw();
+                } catch (IOException e) {
+                    throw new IllegalStateException(e);
+                }
+            }
+        }).setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                dialog.cancel();
+            }
+        });
+        AlertDialog dialog = builder.show();
+        final Button ok = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+        ok.setEnabled(false);
+        input.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override
+            public void afterTextChanged(Editable s) {
+                if (input.getText().length() > 0) {
+                    ok.setEnabled(true);
+                } else {
+                    ok.setEnabled(false);
+                }
+            }
+        });
     }
 
     private void hideKeyboard() {

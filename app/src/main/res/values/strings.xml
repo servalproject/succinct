@@ -21,6 +21,7 @@
     <string name="identity_card_title">Your identity</string>
     <string name="identity_card_subtitle">Please set before starting or joining a team</string>
     <string name="name">Name</string>
+    <string name="team_name">Team Name</string>
     <string name="id">ID</string>
     <string name="save">Save</string>
     <string name="edit">Edit</string>
