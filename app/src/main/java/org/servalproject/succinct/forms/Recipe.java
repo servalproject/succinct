@@ -2,9 +2,9 @@ package org.servalproject.succinct.forms;
 
 import android.util.Log;
 
-class Recipe {
-	long ptr;
-	String recipe;
+public class Recipe {
+	private long ptr;
+	private String recipe;
 	byte[] hash;
 	String formName;
 
@@ -31,15 +31,6 @@ class Recipe {
 	public byte[] compress(Stats stats, String formInstance){
 		String stripped = stripForm(this.ptr, formInstance);
 		return compressForm(stats.ptr, this.ptr, stripped);
-	}
-
-	public static byte[] compress(Stats stats, String definition, String instance){
-		Recipe recipe = new Recipe(definition);
-		try{
-			return recipe.compress(stats, instance);
-		}finally {
-			recipe.close();
-		}
 	}
 
 	void close(){
