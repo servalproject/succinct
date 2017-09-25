@@ -42,7 +42,7 @@ import uk.rock7.connect.protocol.R7DeviceGprsDelegate;
 import uk.rock7.connect.protocol.R7DeviceMessagingDelegate;
 import uk.rock7.connect.protocol.R7DeviceResponseDelegate;
 
-public class RockMessaging implements IMessaging {
+public class RockMessaging {
 
 	private final Context context;
 
@@ -206,18 +206,27 @@ public class RockMessaging implements IMessaging {
 		if ((connectionState == R7ConnectionState.R7ConnectionStateIdle
 				||connectionState == R7ConnectionState.R7ConnectionStateOff)
 				&& adapter.isEnabled()) {
-			// (mostly) harmless method that should trigger an enabled check
+			// (mostly) harmless method that should trigger a bluetooth enabled check
 			Log.v(TAG, "Fixing state by enabling again");
 			comms.enableWithApplicationIdentifier(BuildConfig.rockAppId);
 		}
 	}
 
+	public boolean canConnect(){
+		return connectionState == R7ConnectionState.R7ConnectionStateReady ||
+				connectionState == R7ConnectionState.R7ConnectionStateDiscovering;
+	}
+
 	// Connect to this device, remember the device and auto reconnect
 	public void connect(Device device){
-		setLastAction("Connecting to "+device.id);
+		connect(device.id);
+	}
+
+	public void connect(String deviceId){
+		setLastAction("Connecting to "+deviceId);
 		checkState();
-		deviceId = device.id;
-		comms.connect(device.id);
+		this.deviceId = deviceId;
+		comms.connect(deviceId);
 	}
 
 	public void disconnect(){
@@ -272,14 +281,20 @@ public class RockMessaging implements IMessaging {
 	}
 
 	private short nextId=0;
-	public short sendMessage(byte bytes[]){
+	public RockMessage sendMessage(byte bytes[]){
 		setLastAction("Sending Message");
-		return comms.sendMessageWithDataAndIdentifier(bytes, nextId++);
+		return newMessage(comms.sendMessageWithDataAndIdentifier(bytes, nextId++));
 	}
 
-	public short sendRawMessage(byte bytes[]){
+	public RockMessage sendRawMessage(byte bytes[]){
 		setLastAction("Sending Raw Message");
-		return comms.sendRawMessageWithDataAndIdentifier(bytes, nextId++);
+		return newMessage(comms.sendRawMessageWithDataAndIdentifier(bytes, nextId++));
+	}
+
+	private RockMessage newMessage(short id){
+		RockMessage ret = new RockMessage(id);
+		messages.put(id, ret);
+		return ret;
 	}
 
 	public void onTrimMemory(int level){
@@ -438,9 +453,9 @@ public class RockMessaging implements IMessaging {
 			observable.notifyObservers();
 
 			if (genericDevice!=null && r7LockState == R7LockState.R7LockStateUnlocked){
+			/*
 				// device is now ready for more commands...
 				requestGpsFix();
-			/*
 				// TODO request interesting parameter values?
 				R7GenericDeviceParameter values[] = R7GenericDeviceParameter.values();
 				for(DeviceParameter p: connectedDevice.parameters()){
@@ -517,16 +532,30 @@ public class RockMessaging implements IMessaging {
 		}
 	};
 
+	private final HashMap<Short, RockMessage> messages = new HashMap<>();
+
 	private R7DeviceMessagingDelegate messaging = new R7DeviceMessagingDelegate() {
 		@Override
 		public void messageProgressCompleted(short i) {
 			Log.v(TAG, "messageProgressCompleted("+i+")");
-			observable.notifyObservers();
+			RockMessage message = messages.get(i);
+			if (message!=null){
+				message.completed = true;
+				messages.remove(i);
+				observable.notifyObservers(message);
+			}
 		}
 
 		@Override
 		public boolean messageStatusUpdated(short i, R7MessageStatus r7MessageStatus) {
 			Log.v(TAG, "messageStatusUpdated("+i+", "+r7MessageStatus+")");
+			RockMessage message = messages.get(i);
+			if (message!=null){
+				message.status = r7MessageStatus;
+				observable.notifyObservers(message);
+				// which status values indicate that we will not see callbacks about this message again?
+			}
+			// if we return false, the callback should happen again
 			return true;
 		}
 
@@ -545,6 +574,9 @@ public class RockMessaging implements IMessaging {
 
 		@Override
 		public boolean messageReceived(short i, byte[] bytes) {
+			// what does this message id indicate?
+			// TODO class to encapsulate the incoming message?
+			observable.notifyObservers(bytes);
 			Log.v(TAG, "messageReceived("+i+", "+RockMessaging.toString(bytes)+")");
 			return true;
 		}
@@ -552,6 +584,12 @@ public class RockMessaging implements IMessaging {
 		@Override
 		public void messageProgressUpdated(short i, int part, int total) {
 			Log.v(TAG, "messageProgressUpdated("+i+", "+part+", "+total+")");
+			RockMessage message = messages.get(i);
+			if (message!=null){
+				message.part = part;
+				message.total = total;
+				observable.notifyObservers(message);
+			}
 		}
 
 		@Override
@@ -593,5 +631,4 @@ public class RockMessaging implements IMessaging {
 			Log.v(TAG, "fileTransferCompleted");
 		}
 	};
-
 }
