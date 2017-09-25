@@ -20,6 +20,8 @@ public class PeerId {
 
 	PeerId(byte[] bytes){
 		this.id = bytes;
+		if (id.length!=LEN)
+			throw new IllegalStateException("Unexpected length!");
 	}
 	public PeerId(ByteBuffer buff){
 		this.id = new byte[LEN];
@@ -33,9 +35,19 @@ public class PeerId {
 		new SecureRandom().nextBytes(id);
 	}
 
+	public static PeerId fromBuffer(byte[] buffer, int offset){
+		byte[] id = new byte[LEN];
+		System.arraycopy(buffer, offset, id, 0, LEN);
+		return new PeerId(id);
+	}
+
 	@Override
 	public String toString() {
 		return Hex.toString(id);
+	}
+
+	public void toBuffer(byte[] buffer, int offset){
+		System.arraycopy(id, 0, buffer, offset, LEN);
 	}
 
 	public void write(ByteBuffer buff){

@@ -71,7 +71,11 @@ public class Storage {
 	}
 
 	public <T> RecordIterator<T> openIterator(Factory<T> factory, PeerId peer) throws IOException {
-		RecordStore file = openFile(peer.toString()+"/"+factory.getFileName());
+		return openIterator(factory, peer.toString());
+	}
+
+	public <T> RecordIterator<T> openIterator(Factory<T> factory, String folder) throws IOException {
+		RecordStore file = openFile(folder+"/"+factory.getFileName());
 		return new RecordIterator<>(file, factory);
 	}
 

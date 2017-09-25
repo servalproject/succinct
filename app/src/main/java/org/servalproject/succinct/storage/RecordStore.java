@@ -68,11 +68,15 @@ public class RecordStore {
 	}
 
 	public synchronized void readBytes(long offset, byte[] bytes) throws IOException {
+		if (offset+bytes.length>EOF)
+			throw new IllegalStateException();
 		file.seek(offset);
 		file.readFully(bytes);
 	}
 
 	public synchronized int readBytes(long offset, ByteBuffer buffer) throws IOException {
+		if (offset+buffer.remaining()>EOF)
+			throw new IllegalStateException();
 		file.seek(offset);
 		return file.getChannel().read(buffer);
 	}
