@@ -13,7 +13,7 @@ import java.nio.ByteBuffer;
 import java.util.Observable;
 
 public class RecordStore {
-	final File filename;
+	public final File filename;
 	private final Storage store;
 	private final RandomAccessFile file;
 	public long EOF=-1;

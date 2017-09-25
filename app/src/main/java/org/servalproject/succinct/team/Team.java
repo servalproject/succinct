@@ -49,7 +49,6 @@ public class Team extends Message<Team>{
 
     @Override
     public void process(Peer peer) {
-        // cache set of known teams?
     }
 
     @Override

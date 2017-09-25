@@ -6,11 +6,10 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.preference.PreferenceManager;
 
+import org.servalproject.succinct.messaging.MessageQueue;
 import org.servalproject.succinct.messaging.rock.RockMessaging;
 import org.servalproject.succinct.networking.Networks;
-import org.servalproject.succinct.networking.Peer;
 import org.servalproject.succinct.networking.PeerId;
-import org.servalproject.succinct.storage.RecordIterator;
 import org.servalproject.succinct.storage.Storage;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.team.TeamMember;
@@ -68,10 +67,18 @@ public class App extends Application {
 				ed.apply();
 			}
 			PeerId teamId = fromPreference(prefs, TEAM_ID);
-			if (teamId!=null) {
+			if (teamId!=null)
 				teamStorage = new Storage(this, teamId);
-			}
 			networks = Networks.init(this, myId);
+
+			if (teamStorage!=null) {
+				backgroundHandler.post(new Runnable() {
+					@Override
+					public void run() {
+						MessageQueue.init(App.this);
+					}
+				});
+			}
 		} catch (java.io.IOException e) {
 			throw new IllegalStateException("");
 		}
@@ -100,6 +107,13 @@ public class App extends Application {
 		SharedPreferences.Editor ed = prefs.edit();
 		ed.putString(TEAM_ID, teamId.toString());
 		ed.apply();
+
+		backgroundHandler.post(new Runnable() {
+			@Override
+			public void run() {
+				MessageQueue.init(App.this);
+			}
+		});
 	}
 
 	public void joinTeam(PeerId teamId) throws IOException {
