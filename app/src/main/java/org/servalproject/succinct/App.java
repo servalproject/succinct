@@ -6,11 +6,15 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.preference.PreferenceManager;
 
+import org.servalproject.succinct.chat.ChatDatabase;
+import org.servalproject.succinct.chat.StoredChatMessage;
 import org.servalproject.succinct.messaging.MessageQueue;
 import org.servalproject.succinct.messaging.rock.RockMessaging;
 import org.servalproject.succinct.networking.Networks;
 import org.servalproject.succinct.networking.PeerId;
+import org.servalproject.succinct.storage.RecordIterator;
 import org.servalproject.succinct.storage.Storage;
+import org.servalproject.succinct.storage.StorageWatcher;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.team.TeamMember;
 
@@ -140,6 +144,18 @@ public class App extends Application {
 			@Override
 			public void run() {
 				MessageQueue.init(App.this);
+				StorageWatcher<StoredChatMessage> chatWatcher = new StorageWatcher<StoredChatMessage>(backgroundHandler, teamStorage, StoredChatMessage.factory) {
+					@Override
+					protected void Visit(PeerId peer, RecordIterator<StoredChatMessage> records) throws IOException {
+						// todo wait until we have peer's name from id file
+						records.reset("imported");
+						ChatDatabase db = ChatDatabase.getInstance(App.this);
+						// todo handle duplicate records in case previous process inserted without saving mark?
+						db.insert(teamStorage.teamId, peer, records);
+						records.mark("imported");
+					}
+				};
+				chatWatcher.activate();
 			}
 		});
 	}
