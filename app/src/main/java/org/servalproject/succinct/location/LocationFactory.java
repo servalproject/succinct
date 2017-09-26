@@ -20,7 +20,7 @@ public class LocationFactory extends Factory<Location>{
 	public Location create(DeSerialiser serialiser) {
 		byte flags = serialiser.getByte();
 		Location ret = new Location(serialiser.getString());
-		ret.setTime(serialiser.getLong());
+		ret.setTime(serialiser.getRawLong());
 		ret.setLatitude(serialiser.getDouble());
 		ret.setLongitude(serialiser.getDouble());
 		if ((flags & 1)!=0)
