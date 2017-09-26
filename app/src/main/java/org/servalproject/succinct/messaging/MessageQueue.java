@@ -57,6 +57,7 @@ public class MessageQueue {
 	}
 
 	public void fragmentMessage(byte[] messageBytes) throws IOException {
+        /* fixme undefined reference to queueState
 		int offset=0;
 		while(offset<messageBytes.length){
 			int len = messageBytes.length - offset;
@@ -67,5 +68,6 @@ public class MessageQueue {
 			fragments.append(f);
 			offset+=len;
 		}
+		*/
 	}
 }
