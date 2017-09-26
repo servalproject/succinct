@@ -72,12 +72,7 @@ public class App extends Application {
 			networks = Networks.init(this, myId);
 
 			if (teamStorage!=null) {
-				backgroundHandler.post(new Runnable() {
-					@Override
-					public void run() {
-						MessageQueue.init(App.this);
-					}
-				});
+				postJoinTeam();
 			}
 		} catch (java.io.IOException e) {
 			throw new IllegalStateException("");
@@ -108,12 +103,7 @@ public class App extends Application {
 		ed.putString(TEAM_ID, teamId.toString());
 		ed.apply();
 
-		backgroundHandler.post(new Runnable() {
-			@Override
-			public void run() {
-				MessageQueue.init(App.this);
-			}
-		});
+		postJoinTeam();
 	}
 
 	public void joinTeam(PeerId teamId) throws IOException {
@@ -134,6 +124,8 @@ public class App extends Application {
 		ed.apply();
 		// trigger a heartbeat now, which should start syncing with existing peers almost immediately
 		networks.setAlarm(0);
+
+		postJoinTeam();
 	}
 
 	@Override
@@ -141,5 +133,14 @@ public class App extends Application {
 		if (rock!=null && level!=TRIM_MEMORY_UI_HIDDEN)
 			rock.onTrimMemory(level);
 		super.onTrimMemory(level);
+	}
+
+	private void postJoinTeam() {
+		backgroundHandler.post(new Runnable() {
+			@Override
+			public void run() {
+				MessageQueue.init(App.this);
+			}
+		});
 	}
 }
