@@ -13,6 +13,9 @@ import android.support.annotation.IntDef;
 import android.util.Log;
 
 import org.servalproject.succinct.BuildConfig;
+import org.servalproject.succinct.storage.DeSerialiser;
+import org.servalproject.succinct.storage.Factory;
+import org.servalproject.succinct.storage.Serialiser;
 import org.servalproject.succinct.team.TeamMember;
 
 import java.lang.annotation.Retention;
@@ -83,6 +86,30 @@ public class ChatDatabase extends SQLiteOpenHelper {
             }
         }
     }
+
+    public static final Factory<ChatMessage> factory = new Factory<ChatMessage>() {
+        @Override
+        public String getFileName() {
+            return "chat";
+        }
+
+        @Override
+        public ChatMessage create(DeSerialiser serialiser) {
+            ChatMessage msg = new ChatMessage();
+            // noinspection WrongConstant
+            msg.type = (int) serialiser.getByte();
+            msg.time = new Date(serialiser.getRawLong());
+            msg.message = serialiser.getEndString();
+            return msg;
+        }
+
+        @Override
+        public void serialise(Serialiser serialiser, ChatMessage object) {
+            serialiser.putByte((byte) TYPE_MESSAGE);
+            serialiser.putRawLong(object.time.getTime());
+            serialiser.putEndString(object.message);
+        }
+    };
 
     public static class ChatMessageCursor extends CursorWrapper {
         // todo set up all fields
