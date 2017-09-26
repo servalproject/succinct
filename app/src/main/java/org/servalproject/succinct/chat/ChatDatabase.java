@@ -102,7 +102,7 @@ public class ChatDatabase extends SQLiteOpenHelper {
                 + ChatMessageTable.TIME + ", "
                 + ChatMessageTable.MESSAGE + ", "
                 + ChatMessageTable.IS_READ + ", "
-                + " true AS sent_by_me" + " FROM " // TODO FIXME
+                + " 1 AS sent_by_me" + " FROM " // TODO FIXME
                 + ChatMessageTable._TABLE_NAME + " LEFT JOIN "
                 + SenderTable._TABLE_NAME + " ON "
                 + ChatMessageTable.SENDER + " = " + SenderTable._TABLE_NAME + "." + SenderTable._ID;
