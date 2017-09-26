@@ -21,9 +21,8 @@ import android.widget.EditText;
 import org.servalproject.succinct.chat.ChatAdapter;
 import org.servalproject.succinct.chat.ChatCursorLoader;
 import org.servalproject.succinct.chat.ChatDatabase;
-import org.servalproject.succinct.chat.ChatDatabase.ChatMessage;
 import org.servalproject.succinct.chat.ChatDatabase.ChatMessageCursor;
-import org.servalproject.succinct.team.TeamMember;
+import org.servalproject.succinct.chat.StoredChatMessage;
 
 import java.io.IOException;
 import java.util.Date;
@@ -69,33 +68,22 @@ public class ChatFragment extends Fragment implements LoaderManager.LoaderCallba
         @Override
         public void onClick(View view) {
             Log.d(TAG, "send: "+ input.getText());
-            sendMessage(input.getText().toString());
+            sendMessage(input.getText().toString().trim());
             input.setText("");
             sendButton.setEnabled(false);
         }
     };
 
     private void sendMessage(final String s) {
-        // todo new messages should probably get sent to the storage layer first?
         new AsyncTask<String, Void, Void>() {
             @Override
             protected Void doInBackground(String... strings) {
-                ChatMessage msg = new ChatMessage();
-                msg.type = ChatDatabase.TYPE_MESSAGE;
-
+                StoredChatMessage msg = new StoredChatMessage(ChatDatabase.TYPE_MESSAGE, new Date(), s);
                 try {
-                    TeamMember me = app.getMe();
-                    msg.sender = me.name;
-                    msg.senderId = me.employeeId;
-                }catch (IOException e){
+                    app.teamStorage.appendRecord(StoredChatMessage.factory, app.networks.myId, msg);
+                } catch (IOException e) {
                     throw new IllegalStateException(e);
                 }
-
-                msg.message = s;
-                msg.time = new Date();
-                msg.isRead = true;
-                ChatDatabase db = ChatDatabase.getInstance(getActivity().getApplicationContext());
-                db.insert(msg);
                 return null;
             }
         }.execute(s);
@@ -112,7 +100,7 @@ public class ChatFragment extends Fragment implements LoaderManager.LoaderCallba
 
         @Override
         public void afterTextChanged(Editable s) {
-            sendButton.setEnabled(s.length() > 0);
+            sendButton.setEnabled(s.toString().trim().length() > 0);
         }
     };
 
