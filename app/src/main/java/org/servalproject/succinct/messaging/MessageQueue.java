@@ -1,51 +1,45 @@
 package org.servalproject.succinct.messaging;
 
 
+import android.util.Log;
+
 import org.servalproject.succinct.App;
-import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.networking.PeerId;
 import org.servalproject.succinct.storage.RecordIterator;
-import org.servalproject.succinct.storage.RecordStore;
 import org.servalproject.succinct.storage.Storage;
+import org.servalproject.succinct.storage.StorageWatcher;
 import org.servalproject.succinct.team.MembershipList;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.team.TeamMember;
-import org.servalproject.succinct.utils.AndroidObserver;
 
 import java.io.IOException;
-import java.util.Observable;
 
 // Manage the queue of outgoing messages / fragments
 public class MessageQueue {
 	private final Storage store;
 	public final RecordIterator<Fragment> fragments;
+	private static final String TAG = "MessageQueue";
+
+	private final StorageWatcher<TeamMember> teamMembers;
 
 	public MessageQueue(App app) throws IOException {
 		store = app.teamStorage;
 
-		this.fragments = store.openIterator(Fragment.factory, "messaging");
-
-		store.observable.addObserver(new AndroidObserver(App.backgroundHandler){
+		teamMembers = new StorageWatcher<TeamMember>(App.backgroundHandler, store, TeamMember.factory) {
 			@Override
-			public void observe(Observable observable, Object o) {
-				onFileChanged((RecordStore)o);
-			}
-		});
-	}
-
-	private void onFileChanged(RecordStore file){
-		try {
-			String name = file.filename.getName();
-			String parentFolder = file.filename.getParentFile().getName();
-			if (Hex.isHex(parentFolder)) {
-				PeerId peer = new PeerId(parentFolder);
-				if (name.equals(TeamMember.factory.getFileName())) {
+			protected void Visit(PeerId peer, RecordIterator<TeamMember> records) throws IOException {
+				records.reset("enrolled");
+				if (records.getOffset()==0 && records.next()) {
+					Log.v(TAG, "Enrolling "+peer+" in the team list");
 					MembershipList.getInstance(store).enroll(peer);
+					records.next();
+					records.mark("enrolled");
 				}
 			}
-		}catch (Exception e){
-			throw new IllegalStateException(e);
-		}
+		};
+		teamMembers.activate();
+
+		this.fragments = store.openIterator(Fragment.factory, "messaging");
 	}
 
 	private static MessageQueue instance=null;
@@ -54,9 +48,8 @@ public class MessageQueue {
 		try {
 			if (instance!=null)
 				throw new IllegalStateException();
-
 			Team myTeam = app.teamStorage.getLastRecord(Team.factory, app.teamStorage.teamId);
-			if (myTeam.leader.equals(app.networks.myId))
+			if (myTeam!=null && myTeam.leader.equals(app.networks.myId))
 				instance = new MessageQueue(app);
 		} catch (IOException e) {
 			throw new IllegalStateException(e);

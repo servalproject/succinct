@@ -70,6 +70,10 @@ public class Storage {
 		return devices;
 	}
 
+	public <T> boolean exists(Factory<T> factory, PeerId peer){
+		return new File (root, peer.toString()+"/"+factory.getFileName()).exists();
+	}
+
 	public <T> RecordIterator<T> openIterator(Factory<T> factory, PeerId peer) throws IOException {
 		return openIterator(factory, peer.toString());
 	}
@@ -86,6 +90,11 @@ public class Storage {
 
 	public <T> T getLastRecord(Factory<T> factory, PeerId peer) throws IOException {
 		RecordIterator<T> iterator = openIterator(factory, peer);
+		return iterator.readLast();
+	}
+
+	public <T> T getLastRecord(Factory<T> factory, String folder) throws IOException {
+		RecordIterator<T> iterator = openIterator(factory, folder);
 		return iterator.readLast();
 	}
 

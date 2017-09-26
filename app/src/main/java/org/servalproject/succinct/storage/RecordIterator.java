@@ -24,17 +24,38 @@ public class RecordIterator<T> {
 		recordLength = 0;
 	}
 
+	public long getOffset(){
+		return offset;
+	}
+
+	public void mark(String markName) throws IOException {
+		store.setMark(markName, offset);
+	}
+
+	public void reset(String markName) throws IOException {
+		// slightly quirky if you mark between records
+		long offset = store.getMark(markName);
+		if (offset<0 || offset >store.EOF)
+			throw new IllegalStateException();
+		this.offset = offset;
+		this.recordLength = 0;
+	}
+
 	public boolean next() throws IOException {
-		if (offset+recordLength>=store.EOF)
-			return false;
 		offset+=recordLength;
+		if (offset>=store.EOF) {
+			recordLength = 0;
+			return false;
+		}
 		recordLength = store.readLength(offset);
 		return offset+recordLength<=store.EOF;
 	}
 
 	public boolean prev() throws IOException {
-		if (offset<=0)
+		if (offset<=0) {
+			recordLength = 0;
 			return false;
+		}
 		recordLength = store.readLength(offset -4);
 		offset-=recordLength;
 		return offset>=0;

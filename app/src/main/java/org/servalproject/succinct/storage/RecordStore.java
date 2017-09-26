@@ -5,11 +5,16 @@ import android.util.Log;
 import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.utils.ChangedObservable;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.ProtocolException;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Observable;
 
 public class RecordStore {
@@ -22,6 +27,8 @@ public class RecordStore {
 	public PeerTransfer activeTransfer;
 	public final Observable observable = new ChangedObservable();
 	private static final String TAG = "RecordStore";
+	private final File markFile;
+	final HashMap<String, Long> marks = new HashMap<>();
 
 	private native long open(long storePtr, String relativePath);
 	private native void append(long filePtr, byte[] bytes, int offset, int length);
@@ -31,11 +38,69 @@ public class RecordStore {
 	RecordStore(Storage storage, String relativePath) throws IOException {
 		this.store = storage;
 		this.filename = new File(storage.root, relativePath);
+		markFile = new File(storage.root, relativePath+".marks");
 		filename.getParentFile().mkdirs();
 		this.file = new RandomAccessFile(filename, "rw");
 		ptr = open(storage.ptr, relativePath);
 		if (ptr==0)
 			throw new IllegalStateException("file open failed");
+		readMarks();
+	}
+
+	private void readMarks() throws IOException{
+		if (!markFile.exists())
+			return;
+		BufferedReader r = new BufferedReader(new FileReader(markFile));
+		try {
+			String line;
+			while((line = r.readLine())!=null){
+				int i = line.indexOf("=");
+				if (i<0)
+					continue;
+				String name = line.substring(0,i);
+				String value = line.substring(i+1);
+				Log.v(TAG, "'"+name+"' = '"+value+"'");
+				marks.put(name, Long.parseLong(value));
+			}
+		}finally {
+			r.close();
+		}
+	}
+
+	private void flushMarks() throws IOException {
+		if (marks.isEmpty()){
+			Log.v(TAG, "Delete marks");
+			markFile.delete();
+			return;
+		}
+
+		FileWriter w = new FileWriter(markFile);
+		try {
+			for (Map.Entry<String, Long> e : marks.entrySet()) {
+				Log.v(TAG, e.getKey() + "=" + e.getValue() );
+				w.write(e.getKey() + "=" + e.getValue() + "\n");
+			}
+		} finally {
+			w.close();
+		}
+	}
+
+	void setMark(String name, long offset) throws IOException {
+		Long v = marks.get(name);
+		// Noop
+		if ((v==null && offset==0) || (v!=null && v == offset))
+			return;
+		if (offset==0){
+			marks.remove(name);
+		} else {
+			marks.put(name, offset);
+		}
+		flushMarks();
+	}
+
+	long getMark(String name){
+		Long v = marks.get(name);
+		return (v==null) ? 0 : v;
 	}
 
 	public synchronized boolean setTranfer(PeerTransfer transfer){
@@ -52,7 +117,7 @@ public class RecordStore {
 
 	// called from JNI on open or flush success / failure
 	private void jniCallback(long length){
-		boolean notify = EOF == -1;
+		boolean notify = (EOF != -1 && length!=EOF);
 		if (appendOffset > length) {
 			try {
 				file.setLength(length);

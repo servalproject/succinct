@@ -29,7 +29,8 @@ public abstract class StorageWatcher<T> extends AndroidObserver{
 		store.observable.addObserver(this);
 		for(PeerId peer : store.getDevices()){
 			try {
-				Visit(peer, store.openIterator(factory, peer));
+				if (store.exists(factory, peer))
+					Visit(peer, store.openIterator(factory, peer));
 			} catch (IOException e) {
 				Log.e(TAG, e.getMessage(), e);
 			}

@@ -1,6 +1,5 @@
 package org.servalproject.succinct.team;
 
-import org.servalproject.succinct.App;
 import org.servalproject.succinct.networking.PeerId;
 import org.servalproject.succinct.storage.RecordIterator;
 import org.servalproject.succinct.storage.Storage;
@@ -20,6 +19,7 @@ public class MembershipList {
 		this.store = store;
 		iterator = store.openIterator(Membership.factory, store.teamId);
 		iterator.start();
+		members.add(new TeamMember(0,"EOC"));
 	}
 
 	private static MembershipList instance;
@@ -33,10 +33,12 @@ public class MembershipList {
 		while(iterator.next()){
 			Membership membership = iterator.read();
 			if (membership.enroll){
-				TeamMember member = store.getLastRecord(TeamMember.factory, membership.peerId);
-				int pos = members.size();
-				members.add(member);
-				positions.put(membership.peerId, pos);
+				if (!positions.containsKey(membership.peerId)) {
+					TeamMember member = store.getLastRecord(TeamMember.factory, membership.peerId);
+					int pos = members.size();
+					members.add(member);
+					positions.put(membership.peerId, pos);
+				}
 			}else{
 				// null out anyone who has left
 				int pos = positions.get(membership.peerId);
