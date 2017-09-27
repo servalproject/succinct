@@ -15,6 +15,7 @@ import org.servalproject.succinct.networking.PeerId;
 import org.servalproject.succinct.storage.RecordIterator;
 import org.servalproject.succinct.storage.Storage;
 import org.servalproject.succinct.storage.StorageWatcher;
+import org.servalproject.succinct.team.MembershipList;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.team.TeamMember;
 
@@ -25,6 +26,7 @@ public class App extends Application {
 	private RockMessaging rock;
 	public Storage teamStorage;
 	public Networks networks;
+	public MembershipList membershipList;
 	private TeamMember me;
 
 	// a single background thread for short work tasks
@@ -139,7 +141,8 @@ public class App extends Application {
 		super.onTrimMemory(level);
 	}
 
-	private void postJoinTeam() {
+	private void postJoinTeam() throws IOException {
+		membershipList = MembershipList.getInstance(teamStorage);
 		backgroundHandler.post(new Runnable() {
 			@Override
 			public void run() {

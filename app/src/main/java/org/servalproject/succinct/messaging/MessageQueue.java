@@ -22,7 +22,7 @@ public class MessageQueue {
 
 	private final StorageWatcher<TeamMember> teamMembers;
 
-	public MessageQueue(App app) throws IOException {
+	public MessageQueue(final App app) throws IOException {
 		store = app.teamStorage;
 
 		teamMembers = new StorageWatcher<TeamMember>(App.backgroundHandler, store, TeamMember.factory) {
@@ -31,7 +31,7 @@ public class MessageQueue {
 				records.reset("enrolled");
 				if (records.getOffset()==0 && records.next()) {
 					Log.v(TAG, "Enrolling "+peer+" in the team list");
-					MembershipList.getInstance(store).enroll(peer);
+					app.membershipList.enroll(peer);
 					records.next();
 					records.mark("enrolled");
 				}
