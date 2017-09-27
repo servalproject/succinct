@@ -9,12 +9,14 @@ import org.servalproject.succinct.storage.Serialiser;
 
 public class Team extends Message<Team>{
 
+    public final long epoc;
     public final PeerId id;
     public final PeerId leader;
     public final String name;
 
-    public Team(PeerId id, PeerId leader, String name) {
+    public Team(long epoc, PeerId id, PeerId leader, String name) {
         super(Type.TeamMessage);
+        this.epoc = epoc;
         this.id = id;
         this.leader = leader;
         this.name = name;
@@ -28,14 +30,16 @@ public class Team extends Message<Team>{
 
         @Override
         public Team create(DeSerialiser serialiser) {
+            long epoc = serialiser.getRawLong();
             PeerId id = new PeerId(serialiser);
             PeerId leader = new PeerId(serialiser);
             String name = serialiser.getString();
-            return new Team(id, leader, name);
+            return new Team(epoc, id, leader, name);
         }
 
         @Override
         public void serialise(Serialiser serialiser, Team object) {
+            serialiser.putRawLong(object.epoc);
             object.id.serialise(serialiser);
             object.leader.serialise(serialiser);
             serialiser.putString(object.name);

@@ -17,10 +17,12 @@ import java.util.List;
  */
 
 public class Membership {
+	public final long time;
 	public final PeerId peerId;
 	public final boolean enroll;
 
-	Membership(PeerId peerId, boolean enroll){
+	Membership(long time, PeerId peerId, boolean enroll){
+		this.time = time;
 		this.peerId = peerId;
 		this.enroll = enroll;
 	}
@@ -33,13 +35,15 @@ public class Membership {
 
 		@Override
 		public Membership create(DeSerialiser serialiser) {
+			long time = serialiser.getRawLong();
 			PeerId id = new PeerId(serialiser);
 			boolean enroll = !serialiser.hasRemaining();
-			return new Membership(id, enroll);
+			return new Membership(time, id, enroll);
 		}
 
 		@Override
 		public void serialise(Serialiser serialiser, Membership object) {
+			serialiser.putRawLong(object.time);
 			object.peerId.serialise(serialiser);
 			if (!object.enroll)
 				serialiser.putByte((byte)1);

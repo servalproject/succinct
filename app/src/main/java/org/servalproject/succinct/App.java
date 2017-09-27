@@ -100,7 +100,8 @@ public class App extends Application {
 		TeamMember me = new TeamMember(myId, myName);
 		PeerId teamId = new PeerId();
 		Storage storage = new Storage(this, teamId);
-		storage.appendRecord(Team.factory, teamId, new Team(teamId, networks.myId, name));
+		Team team = new Team(System.currentTimeMillis(), teamId, networks.myId, name);
+		storage.appendRecord(Team.factory, teamId, team);
 		storage.appendRecord(TeamMember.factory, networks.myId, me);
 
 		teamStorage = storage;

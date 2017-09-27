@@ -64,6 +64,11 @@ public class DeSerialiser {
 		return buff.getInt();
 	}
 
+	// Time since epoc in 0.1s
+	public long getTime(long epoc){
+		return (getRawInt()*100L) + epoc;
+	}
+
 	public long getRawLong(){
 		return buff.getLong();
 	}

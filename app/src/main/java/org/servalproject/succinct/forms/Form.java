@@ -14,8 +14,10 @@ import java.io.IOException;
 
 public class Form {
 
-	private final byte[] record;
-	private Form(byte[] record){
+	public final long time;
+	public final byte[] record;
+	private Form(long time, byte[] record){
+		this.time = time;
 		this.record = record;
 	}
 
@@ -27,11 +29,13 @@ public class Form {
 
 		@Override
 		public Form create(DeSerialiser serialiser) {
-			return new Form(serialiser.getFixedBytes(DeSerialiser.REMAINING));
+			long time = serialiser.getRawLong();
+			return new Form(time, serialiser.getFixedBytes(DeSerialiser.REMAINING));
 		}
 
 		@Override
 		public void serialise(Serialiser serialiser, Form object) {
+			serialiser.putRawLong(object.time);
 			serialiser.putFixedBytes(object.record);
 		}
 	};
@@ -39,19 +43,21 @@ public class Form {
 	private static final String TAG = "Forms";
 
 	public static void compress(Context context, String formSpecification, String completedRecord){
+		long time = System.currentTimeMillis();
 		Stats stats = Stats.getInstance(context);
 		try{
 			Recipe recipe = new Recipe(formSpecification);
 			try{
 				byte[] compressed = recipe.compress(stats, completedRecord);
 				App app = (App)context.getApplicationContext();
-				app.teamStorage.appendRecord(factory, app.networks.myId, new Form(compressed));
+				app.teamStorage.appendRecord(factory, app.networks.myId, new Form(time, compressed));
 
 				// store a copy of the form definition in a file
 				// (shouldn't matter who writes it first, the content should be the same)
 				RecordStore storeDefinition = app.teamStorage.openFile("forms/"+ Hex.toString(recipe.hash));
 				if (storeDefinition.EOF == 0){
 					storeDefinition.appendAt(0, formSpecification.getBytes("UTF-8"));
+					storeDefinition.flush(null);
 				}
 			}finally {
 				recipe.close();

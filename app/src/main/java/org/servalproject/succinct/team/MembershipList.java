@@ -68,11 +68,11 @@ public class MembershipList {
 
 	// For now, called automatically by the team leader
 	public void enroll(PeerId peer) throws IOException {
-		iterator.append(new Membership(peer, true));
+		iterator.append(new Membership(System.currentTimeMillis(), peer, true));
 	}
 
 	// Should only be called by the team leader!
 	public void revoke(PeerId peer) throws IOException {
-		iterator.append(new Membership(peer, false));
+		iterator.append(new Membership(System.currentTimeMillis(), peer, false));
 	}
 }

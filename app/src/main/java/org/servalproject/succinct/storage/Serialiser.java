@@ -66,6 +66,11 @@ public class Serialiser {
 		buff.putLong(value);
 	}
 
+	// Time since epoc in 0.1s
+	public void putTime(long value, long epoc){
+		putRawInt((int) ((value - epoc)/100));
+	}
+
 	public void putLong(long value){
 		while(true){
 			if ((value & ~0x7f) !=0) {
