@@ -6,6 +6,7 @@ import org.servalproject.succinct.networking.Peer;
 import org.servalproject.succinct.storage.DeSerialiser;
 import org.servalproject.succinct.storage.Factory;
 import org.servalproject.succinct.storage.Serialiser;
+import org.servalproject.succinct.team.Team;
 
 import java.nio.BufferOverflowException;
 import java.nio.BufferUnderflowException;
@@ -74,6 +75,8 @@ public abstract class Message<T extends Message<T>> {
 					return RequestBlock.factory.create(serialiser);
 				case FileBlockMessage:
 					return FileBlock.factory.create(serialiser);
+				case TeamMessage:
+					return Team.factory.create(serialiser);
 				case RequestTeamMessage:
 					return RequestTeam.factory.create(serialiser);
 			}
