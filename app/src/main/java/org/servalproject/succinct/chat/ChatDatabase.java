@@ -15,6 +15,8 @@ import org.servalproject.succinct.App;
 import org.servalproject.succinct.BuildConfig;
 import org.servalproject.succinct.networking.PeerId;
 import org.servalproject.succinct.storage.RecordIterator;
+import org.servalproject.succinct.team.MembershipList;
+import org.servalproject.succinct.team.TeamMember;
 
 import java.io.IOException;
 import java.lang.annotation.Retention;
@@ -38,78 +40,108 @@ public class ChatDatabase extends SQLiteOpenHelper {
     private static HashMap<String, Long> teamCache = new HashMap<>();
     private static HashMap<String, Long> senderCache = new HashMap<>();
 
-    @IntDef({TYPE_MESSAGE, TYPE_JOIN, TYPE_PART})
+    @IntDef({TYPE_MESSAGE, TYPE_JOIN, TYPE_PART, TYPE_UNKNOWN})
     @Retention(RetentionPolicy.SOURCE)
     public @interface ChatMessageType {}
     public static final int TYPE_MESSAGE = 0;
     public static final int TYPE_JOIN = 1;
     public static final int TYPE_PART = 2;
+    public static final int TYPE_UNKNOWN = -1;
 
     public static class ChatMessage {
-        public long id;
+        public final long id;
         @ChatMessageType
-        public int type;
-        public int senderId;
-        public String sender;
-        public Date time;
-        public String message;
-        public boolean isRead;
-        public boolean isFirstOnDay;
-        public boolean sentByMe;
+        public final int type;
+        public final TeamMember sender;
+        public final Date time;
+        public final String message;
+        public final boolean isRead;
+        public final boolean isFirstOnDay;
+        public final boolean sentByMe;
 
-        public ChatMessage(ChatMessageCursor c) {
-            // todo don't hard code
-            id = c.getLong(0);
-            //noinspection WrongConstant
-            type = c.getInt(1);
-            senderId = c.getInt(2);
-            sender = c.getString(3);
-            time = new Date(c.getLong(4));
-            message = c.getString(5);
-            isRead = (c.getInt(6) != 0);
-            sentByMe = (c.getInt(7) != 0);
-
-            // check if we should show the full date with this message
-            // fixme manipulating the cursor works but is not a good approach
-            if (c.isFirst()) {
-                isFirstOnDay = true;
-            } else {
-                long day, prevDay;
-                Calendar cal = Calendar.getInstance();
-                cal.setTime(time);
-                day = cal.get(Calendar.YEAR)*1000+cal.get(Calendar.DAY_OF_YEAR);
-                c.moveToPrevious();
-                cal.setTimeInMillis(c.getLong(4));
-                prevDay = cal.get(Calendar.YEAR)*1000+cal.get(Calendar.DAY_OF_YEAR);
-                isFirstOnDay = (day != prevDay);
+        public ChatMessage(ChatMessageCursor c, MembershipList members) {
+            id = c.getId();
+            int msgType = c.getMessageType();
+            switch (msgType) {
+                case TYPE_MESSAGE:
+                case TYPE_JOIN:
+                case TYPE_PART:
+                    // noinspection WrongConstant
+                    type = msgType;
+                    break;
+                default:
+                    type = TYPE_UNKNOWN;
             }
+            try {
+                sender = members.getTeamMember(c.getPeerId());
+            } catch (IOException e) {
+                throw new IllegalStateException(e);
+            }
+            time = c.getTime();
+            message = c.getMessage();
+            isRead = c.getIsRead();
+            isFirstOnDay = c.getIsFirstOnDay();
+            sentByMe = c.getIsSentByMe();
         }
     }
 
     public static class ChatMessageCursor extends CursorWrapper {
-        // todo set up all fields
         public static final int ID = 0;
-        public static final int SENT_BY_ME = 7;
-        public ChatMessageCursor(Cursor c) {
+        public static final int MESSAGE_TYPE = 1;
+        public static final int PEER_ID = 2;
+        public static final int TIME = 3;
+        public static final int MESSAGE = 4;
+        public static final int IS_READ = 5;
+        public static final int IS_SENT_BY_ME = 6;
+
+        private ChatMessageCursor(Cursor c) {
             super(c);
+        }
+
+        public long getId() { return getLong(ID); }
+        public int getMessageType() { return getInt(MESSAGE_TYPE); }
+        public PeerId getPeerId() { return new PeerId(getString(PEER_ID)); }
+        public Date getTime() { return new Date(getLong(TIME)); }
+        public String getMessage() { return getString(MESSAGE); }
+        public boolean getIsRead() { return getInt(IS_READ) != 0; }
+        public boolean getIsSentByMe() { return getInt(IS_SENT_BY_ME) != 0; }
+
+        public boolean getIsFirstOnDay() {
+            if (isFirst()) return true;
+            long day, prevDay;
+            Calendar cal = Calendar.getInstance();
+            cal.setTimeInMillis(getLong(TIME));
+            day = cal.get(Calendar.YEAR)*1000+cal.get(Calendar.DAY_OF_YEAR);
+            moveToPrevious();
+            cal.setTimeInMillis(getLong(TIME));
+            prevDay = cal.get(Calendar.YEAR)*1000+cal.get(Calendar.DAY_OF_YEAR);
+            moveToNext();
+            return (day != prevDay);
+        }
+
+        public static ChatMessageCursor getCursor(SQLiteDatabase db, long teamId, long mySenderId) {
+            final String SELECT_CHAT_MESSAGES = "SELECT "
+                    + ChatMessageTable._TABLE_NAME + "." + ChatMessageTable._ID + ", "
+                    + ChatMessageTable.TYPE + ", "
+                    + SenderTable.PEER_ID + ", "
+                    + ChatMessageTable.TIME + ", "
+                    + ChatMessageTable.MESSAGE + ", "
+                    + ChatMessageTable.IS_READ + ", "
+                    + "(" + ChatMessageTable.SENDER + " = " + mySenderId + ") AS sent_by_me"
+                    + " FROM " + ChatMessageTable._TABLE_NAME + " LEFT JOIN " + SenderTable._TABLE_NAME
+                    + " ON " + ChatMessageTable.SENDER + " = " + SenderTable._TABLE_NAME + "." + SenderTable._ID
+                    + " AND " + ChatMessageTable._TABLE_NAME + "." + ChatMessageTable.TEAM + " = " + SenderTable._TABLE_NAME + "." + SenderTable.TEAM
+                    + " WHERE " + ChatMessageTable._TABLE_NAME + "." + ChatMessageTable.TEAM + " = " + teamId
+                    + " ORDER BY " + ChatMessageTable.TIME + ", " + ChatMessageTable._TABLE_NAME + "." + ChatMessageTable._ID;
+            return new ChatMessageCursor(db.rawQuery(SELECT_CHAT_MESSAGES, null));
         }
     }
 
     public ChatMessageCursor getChatMessageCursor() {
         SQLiteDatabase db = getReadableDatabase();
-        final String SELECT_CHAT_MESSAGES = "SELECT "
-                + ChatMessageTable._TABLE_NAME + "." + ChatMessageTable._ID + ", "
-                + ChatMessageTable.TYPE + ", "
-                + ChatMessageTable.SENDER + ", "
-                + SenderTable.NAME + ", "
-                + ChatMessageTable.TIME + ", "
-                + ChatMessageTable.MESSAGE + ", "
-                + ChatMessageTable.IS_READ + ", "
-                + " 1 AS sent_by_me" + " FROM " // TODO FIXME
-                + ChatMessageTable._TABLE_NAME + " LEFT JOIN "
-                + SenderTable._TABLE_NAME + " ON "
-                + ChatMessageTable.SENDER + " = " + SenderTable._TABLE_NAME + "." + SenderTable._ID;
-        return new ChatMessageCursor(db.rawQuery(SELECT_CHAT_MESSAGES, null));
+        long team = getTeamId(db, app.teamStorage.teamId);
+        long me = getSenderId(db, team, app.networks.myId);
+        return ChatMessageCursor.getCursor(db, team, me);
     }
 
     private static final class ChatMessageTable implements BaseColumns {
@@ -194,6 +226,9 @@ public class ChatDatabase extends SQLiteOpenHelper {
                 new String[]{key}, null, null, "1");
         if (c.moveToFirst()) {
             id = c.getLong(0);
+        } else if (db.isReadOnly()) {
+            c.close();
+            return -1;
         } else {
             ContentValues v = new ContentValues();
             v.put(TeamTable.TEAM, key);

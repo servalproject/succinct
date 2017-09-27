@@ -12,6 +12,7 @@ import android.widget.TextView;
 import org.servalproject.succinct.R;
 import org.servalproject.succinct.chat.ChatDatabase.ChatMessage;
 import org.servalproject.succinct.chat.ChatDatabase.ChatMessageCursor;
+import org.servalproject.succinct.team.MembershipList;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -27,6 +28,7 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
     private DateFormat dateFormat = DateFormat.getDateInstance(DateFormat.LONG);
     private boolean atBottom = false;
     private ChatMessageCursor cursor;
+    private final MembershipList membershipList;
 
     @IntDef({TYPE_MESSAGE_RECEIVED, TYPE_MESSAGE_SENT})
     @Retention(RetentionPolicy.SOURCE)
@@ -34,8 +36,9 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
     private static final int TYPE_MESSAGE_RECEIVED = 0;
     private static final int TYPE_MESSAGE_SENT = 1;
 
-    public ChatAdapter() {
+    public ChatAdapter(MembershipList members) {
         setHasStableIds(true);
+        membershipList = members;
     }
 
     public void setCursor(ChatMessageCursor c) {
@@ -74,7 +77,7 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
     @Override
     public void onBindViewHolder(MessageViewHolder holder, int position) {
         cursor.moveToPosition(position);
-        ChatMessage msg = new ChatMessage(cursor);
+        ChatMessage msg = new ChatMessage(cursor, membershipList);
 
         if (msg.isFirstOnDay) {
             holder.horizontalRule.setVisibility(View.VISIBLE);
@@ -86,7 +89,7 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
         }
 
         holder.message.setText(msg.message);
-        holder.sender.setText(msg.sender);
+        holder.sender.setText(msg.sender == null ? "???" : msg.sender.name);
         holder.time.setText(timeFormat.format(msg.time));
     }
 
@@ -98,7 +101,7 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
     @Override
     public long getItemId(int position) {
         if (cursor != null && cursor.moveToPosition(position)) {
-            return cursor.getLong(ChatMessageCursor.ID);
+            return cursor.getId();
         } else {
             return -1;
         }
@@ -110,7 +113,7 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.MessageViewHol
             //noinspection WrongConstant
             return -1;
         }
-        if (cursor.getInt(ChatMessageCursor.SENT_BY_ME) != 0) {
+        if (cursor.getIsSentByMe()) {
             return TYPE_MESSAGE_SENT;
         } else {
             return TYPE_MESSAGE_RECEIVED;

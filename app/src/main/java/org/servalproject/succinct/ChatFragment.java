@@ -54,7 +54,7 @@ public class ChatFragment extends Fragment implements LoaderManager.LoaderCallba
         // Inflate the layout for this fragment
         View view = inflater.inflate(R.layout.fragment_chat, container, false);
         RecyclerView recycler = (RecyclerView) view.findViewById(R.id.chatRecycler);
-        adapter = new ChatAdapter();
+        adapter = new ChatAdapter(((App) getActivity().getApplication()).membershipList);
         recycler.setAdapter(adapter);
         adapter.enableStickyScroll(recycler);
         input = (EditText) view.findViewById(R.id.sendEditText);
