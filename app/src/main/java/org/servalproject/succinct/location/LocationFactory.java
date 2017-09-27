@@ -67,4 +67,47 @@ public class LocationFactory extends Factory<Location>{
 		if (obj.hasSpeed())
 			serialiser.putFloat(obj.getSpeed());
 	}
+
+	/* packing format:
+	    | (90 + lat) * 23301.686 | (180 + lng) * 23301.686 | accuracy |
+	            22 bits                   23 bits             3 bits
+
+         accuracy: 0       <= 10m
+                   1       <= 20m
+                   2       <= 50m
+                   3       <= 100m
+                   4       <= 200m
+                   5       <= 500m
+                   6       <= 1000m
+                   7        > 1000m
+
+	     note: 23301.686 = (2^23-1)/360 - eps
+	 */
+	private static final float[] accLookup = {10f, 20f, 50f, 100f, 200f, 500f, 1000f};
+	private static final double latLngScale = 23301.686;
+	public static void packLatLngAcc(byte[] array, int offset, Location loc) {
+		if (offset+5 >= array.length)
+			throw new IllegalArgumentException();
+
+		double lat = loc.getLatitude();
+		double lng = loc.getLongitude();
+		float acc = loc.getAccuracy();
+
+		int pLat = (int) ((90.0+lat)*latLngScale);
+		int pLng = (int) ((180.0+lng)*latLngScale);
+		int pAcc = 0;
+		while (pAcc < accLookup.length && acc > accLookup[pAcc]) pAcc++;
+
+		if (pLat < 0 || pLat > 0x3fffff || pLng < 0 || pLng > 0x7fffff)
+			throw new IllegalArgumentException();
+
+		long data = (pLat << (23+3)) | (pLng << 3) | pAcc;
+
+		array[offset+0] = (byte) ((data >> 40) & 0xff);
+		array[offset+1] = (byte) ((data >> 32) & 0xff);
+		array[offset+2] = (byte) ((data >> 24) & 0xff);
+		array[offset+3] = (byte) ((data >> 16) & 0xff);
+		array[offset+4] = (byte) ((data >> 8) & 0xff);
+		array[offset+5] = (byte) (data & 0xff);
+	}
 }
