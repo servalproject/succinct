@@ -30,11 +30,12 @@ public class RecordIterator<T> {
 		return offset;
 	}
 
-	public void mark(String markName) throws IOException {
+	public long mark(String markName) throws IOException {
 		store.setMark(markName, offset);
+		return offset;
 	}
 
-	public void reset(String markName) throws IOException {
+	public long reset(String markName) throws IOException {
 		// slightly quirky if you mark between records
 		long offset = store.getMark(markName);
 		if (offset<0 || offset >store.EOF)
@@ -42,6 +43,7 @@ public class RecordIterator<T> {
 		this.offset = offset;
 		this.recordLength = 0;
 		current = null;
+		return offset;
 	}
 
 	public boolean next() throws IOException {

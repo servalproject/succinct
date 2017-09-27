@@ -96,7 +96,7 @@ public class App extends Application {
 	public void createTeam(String name) throws IOException {
 		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
 		String myName = prefs.getString(App.MY_NAME, null);
-		int myId = prefs.getInt(App.MY_EMPLOYEE_ID, -1);
+		String myId = prefs.getString(App.MY_EMPLOYEE_ID, null);
 		TeamMember me = new TeamMember(myId, myName);
 		PeerId teamId = new PeerId();
 		Storage storage = new Storage(this, teamId);
@@ -118,7 +118,7 @@ public class App extends Application {
 			throw new IllegalStateException("Already in a team");
 		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
 		String myName = prefs.getString(App.MY_NAME, null);
-		int myId = prefs.getInt(App.MY_EMPLOYEE_ID, -1);
+		String myId = prefs.getString(App.MY_EMPLOYEE_ID, null);
 		TeamMember me = new TeamMember(myId, myName);
 
 		Storage storage = new Storage(this, teamId);

@@ -22,6 +22,11 @@ public class Team extends Message<Team>{
         this.name = name;
     }
 
+    // team closure message
+    public Team(long time){
+        this(time, null, null, null);
+    }
+
     public static final Factory<Team> factory = new Factory<Team>() {
         @Override
         public String getFileName() {
@@ -31,6 +36,8 @@ public class Team extends Message<Team>{
         @Override
         public Team create(DeSerialiser serialiser) {
             long epoc = serialiser.getRawLong();
+            if (!serialiser.hasRemaining())
+                return new Team(epoc);
             PeerId id = new PeerId(serialiser);
             PeerId leader = new PeerId(serialiser);
             String name = serialiser.getString();
@@ -40,6 +47,8 @@ public class Team extends Message<Team>{
         @Override
         public void serialise(Serialiser serialiser, Team object) {
             serialiser.putRawLong(object.epoc);
+            if (object.id == null)
+                return;
             object.id.serialise(serialiser);
             object.leader.serialise(serialiser);
             serialiser.putString(object.name);

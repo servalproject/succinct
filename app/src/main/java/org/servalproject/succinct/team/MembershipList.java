@@ -22,7 +22,7 @@ public class MembershipList {
 		this.store = store;
 		iterator = store.openIterator(Membership.factory, store.teamId);
 		iterator.start();
-		members.add(new TeamMember(0,"EOC"));
+		members.add(new TeamMember("","EOC"));
 	}
 
 	private static MembershipList instance;

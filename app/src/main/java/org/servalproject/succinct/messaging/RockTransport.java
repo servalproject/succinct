@@ -14,10 +14,12 @@ import uk.rock7.connect.enums.R7LockState;
 
 public class RockTransport extends AndroidObserver implements IMessaging{
 	private final RockMessaging messaging;
+	private final MessageQueue messageQueue;
 	private boolean messagingRequired=false;
 	private String deviceId;
 
-	public RockTransport(Context context){
+	public RockTransport(MessageQueue messageQueue, Context context){
+		this.messageQueue = messageQueue;
 		App app = (App)context.getApplicationContext();
 		messaging = app.getRock();
 		messaging.observable.addObserver(this);
@@ -89,6 +91,7 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 				// TODO, callback to indicate success / failure of delivery && state changed
 				sendingMsg = null;
 				sendingFragment = null;
+				messageQueue.onStateChanged();
 			}
 		}
 		if (messagingRequired) {

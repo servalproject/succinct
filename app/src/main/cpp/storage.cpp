@@ -112,7 +112,7 @@ static int open_db(struct dbstate *state, const char *path){
             memcpy(&state->root, val.mv_data, sizeof state->root);
 
         if (state->root.version != VERSION){
-            // clear everything!
+            LOGIF("%d != %d, CLEARING DATABASE", state->root.version, VERSION);
             mdb_drop(txn, state->index, 0);
             mdb_drop(txn, state->files, 0);
             memset(&state->root, 0, sizeof state->root);

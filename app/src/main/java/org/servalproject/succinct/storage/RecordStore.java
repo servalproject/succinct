@@ -81,7 +81,7 @@ public class RecordStore {
 		FileWriter w = new FileWriter(markFile);
 		try {
 			for (Map.Entry<String, Long> e : marks.entrySet()) {
-				Log.v(TAG, e.getKey() + "=" + e.getValue() );
+				//Log.v(TAG, "writing marks; "+e.getKey() + "=" + e.getValue() );
 				w.write(e.getKey() + "=" + e.getValue() + "\n");
 			}
 		} finally {

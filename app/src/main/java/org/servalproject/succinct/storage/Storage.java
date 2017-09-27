@@ -19,7 +19,7 @@ public class Storage {
 	private final App appContext;
 	public final PeerId teamId;
 	private StoreState state;
-	final File root;
+	public final File root;
 	public long ptr;
 	public final Observable observable = new ChangedObservable();
 
