@@ -44,6 +44,11 @@ public class MembershipList {
 		return positions.containsKey(id) && !removed.contains(id);
 	}
 
+	public Integer getPosition(PeerId id) throws IOException {
+		getMembers();
+		return positions.get(id);
+	}
+
 	public synchronized List<TeamMember> getMembers() throws IOException {
 		while(iterator.next()){
 			Membership membership = iterator.read();
