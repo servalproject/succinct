@@ -7,11 +7,14 @@ import org.servalproject.succinct.storage.Storage;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class MembershipList {
 	private final Storage store;
 	private final HashMap<PeerId, Integer> positions = new HashMap<>();
+	private final Set<PeerId> removed = new HashSet<>();
 	private final RecordIterator<Membership> iterator;
 	private final List<TeamMember> members = new ArrayList<>();
 
@@ -29,6 +32,18 @@ public class MembershipList {
 		return instance;
 	}
 
+	public TeamMember getTeamMember(PeerId id) throws IOException {
+		List<TeamMember> members = getMembers();
+		if (!positions.containsKey(id))
+			return null;
+		return members.get(positions.get(id));
+	}
+
+	public boolean isActive(PeerId id) throws IOException {
+		getMembers();
+		return positions.containsKey(id) && !removed.contains(id);
+	}
+
 	public synchronized List<TeamMember> getMembers() throws IOException {
 		while(iterator.next()){
 			Membership membership = iterator.read();
@@ -40,10 +55,7 @@ public class MembershipList {
 					positions.put(membership.peerId, pos);
 				}
 			}else{
-				// null out anyone who has left
-				int pos = positions.get(membership.peerId);
-				members.remove(pos);
-				members.add(pos, null);
+				removed.add(membership.peerId);
 			}
 		}
 		return members;
