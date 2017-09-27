@@ -1,7 +1,6 @@
 package org.servalproject.succinct.chat;
 
 import android.content.ContentValues;
-import android.content.Context;
 import android.database.Cursor;
 import android.database.CursorWrapper;
 import android.database.sqlite.SQLiteDatabase;
@@ -34,7 +33,7 @@ public class ChatDatabase extends SQLiteOpenHelper {
     private static final int DATABASE_VERSION = 2;
     public static final Uri URI_CHAT_DATA = Uri.parse("sqlite://" + BuildConfig.APPLICATION_ID + "/chatlog");
 
-    private static Context mContext;
+    private final App app;
     private static ChatDatabase instance;
     private static HashMap<String, Long> teamCache = new HashMap<>();
     private static HashMap<String, Long> senderCache = new HashMap<>();
@@ -136,20 +135,20 @@ public class ChatDatabase extends SQLiteOpenHelper {
         private static final String TEAM = "team";
     }
 
-    private ChatDatabase(Context context) {
-        super(context, DATABASE_NAME, null, DATABASE_VERSION);
-        mContext = context;
+    private ChatDatabase(App app) {
+        super(app, DATABASE_NAME, null, DATABASE_VERSION);
+        this.app = app;
     }
 
-    public static synchronized ChatDatabase getInstance (Context context) {
+    public static synchronized ChatDatabase getInstance (App app) {
         if (instance == null) {
-            instance = new ChatDatabase(context);
+            instance = new ChatDatabase(app);
         }
         return instance;
     }
 
     private void notifyChange() {
-        mContext.getContentResolver().notifyChange(URI_CHAT_DATA, null);
+        app.getContentResolver().notifyChange(URI_CHAT_DATA, null);
     }
 
     public void insert(PeerId team, PeerId sender, RecordIterator<StoredChatMessage> records) throws IOException {

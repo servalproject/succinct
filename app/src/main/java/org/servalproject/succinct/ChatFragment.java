@@ -115,7 +115,7 @@ public class ChatFragment extends Fragment implements LoaderManager.LoaderCallba
     @Override
     public Loader<ChatMessageCursor> onCreateLoader(int i, Bundle args) {
         Log.d(TAG, "onCreateLoader");
-        return new ChatCursorLoader(getActivity());
+        return new ChatCursorLoader((App) (getActivity().getApplication()));
     }
 
     @Override

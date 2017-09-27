@@ -22,6 +22,7 @@ import android.content.Context;
 import android.database.Cursor;
 import android.util.Log;
 
+import org.servalproject.succinct.App;
 import org.servalproject.succinct.chat.ChatDatabase.ChatMessageCursor;
 
 /**
@@ -31,13 +32,14 @@ import org.servalproject.succinct.chat.ChatDatabase.ChatMessageCursor;
 public class ChatCursorLoader extends AsyncTaskLoader<ChatMessageCursor> {
     private static final String TAG = "ChatCursorLoader";
     private final ForceLoadContentObserver mObserver;
+    private final App mApp;
     private ChatMessageCursor mCursor;
 
     /* Runs on a worker thread */
     @Override
     public ChatMessageCursor loadInBackground() {
         Log.d(TAG, "loadInBackground");
-        ChatDatabase db = ChatDatabase.getInstance(getContext().getApplicationContext());
+        ChatDatabase db = ChatDatabase.getInstance(mApp);
         ChatMessageCursor c = db.getChatMessageCursor();
         // preload cursor count
         c.getCount();
@@ -67,8 +69,9 @@ public class ChatCursorLoader extends AsyncTaskLoader<ChatMessageCursor> {
             oldCursor.close();
         }
     }
-    public ChatCursorLoader(Context context) {
-        super(context);
+    public ChatCursorLoader(App app) {
+        super(app);
+        mApp = app;
         mObserver = new ForceLoadContentObserver();
     }
     /**
