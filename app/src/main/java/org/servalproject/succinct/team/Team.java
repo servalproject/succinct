@@ -30,7 +30,7 @@ public class Team extends Message<Team>{
         public Team create(DeSerialiser serialiser) {
             PeerId id = new PeerId(serialiser);
             PeerId leader = new PeerId(serialiser);
-            String name = serialiser.getEndString();
+            String name = serialiser.getString();
             return new Team(id, leader, name);
         }
 
@@ -38,7 +38,7 @@ public class Team extends Message<Team>{
         public void serialise(Serialiser serialiser, Team object) {
             object.id.serialise(serialiser);
             object.leader.serialise(serialiser);
-            serialiser.putEndString(object.name);
+            serialiser.putString(object.name);
         }
     };
 

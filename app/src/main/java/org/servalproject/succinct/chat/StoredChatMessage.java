@@ -32,7 +32,7 @@ public class StoredChatMessage {
         public StoredChatMessage create(DeSerialiser serialiser) {
             int type = (int) serialiser.getByte();
             Date time = new Date(serialiser.getRawLong());
-            String message = serialiser.getEndString();
+            String message = serialiser.getString();
             return new StoredChatMessage(type, time, message);
         }
 
@@ -40,7 +40,7 @@ public class StoredChatMessage {
         public void serialise(Serialiser serialiser, StoredChatMessage object) {
             serialiser.putByte((byte) object.type);
             serialiser.putRawLong(object.time.getTime());
-            serialiser.putEndString(object.message);
+            serialiser.putString(object.message);
         }
     };
 }

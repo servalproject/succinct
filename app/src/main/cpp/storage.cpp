@@ -17,7 +17,7 @@
 #define SYNC_MSG_REQ_METADATA 1
 #define SYNC_MSG_SEND_METADATA 2
 
-#define VERSION 1
+#define VERSION 2
 
 struct file_version{
     uint32_t version;

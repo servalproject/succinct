@@ -19,12 +19,15 @@ public class DeSerialiser {
 		return buff.hasRemaining();
 	}
 
+	// return a NULL terminated string
 	public String getString(){
-		return new String(getBytes(), Serialiser.UTF_8);
-	}
-
-	public String getEndString(){
-		return new String(getFixedBytes(DeSerialiser.REMAINING), Serialiser.UTF_8);
+		int i;
+		for (i = buff.position(); i<buff.limit() && buff.get(i)!=0;i++)
+			;
+		String ret = new String(getFixedBytes(i - buff.position()));
+		if (i<buff.limit())
+			buff.get();
+		return ret;
 	}
 
 	public double getDouble(){
@@ -55,6 +58,10 @@ public class DeSerialiser {
 	public byte[] getBytes(){
 		int length = (int)getLong();
 		return getFixedBytes(length);
+	}
+
+	public int getRawInt(){
+		return buff.getInt();
 	}
 
 	public long getRawLong(){

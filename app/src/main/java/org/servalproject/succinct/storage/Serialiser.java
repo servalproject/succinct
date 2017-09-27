@@ -1,15 +1,17 @@
 package org.servalproject.succinct.storage;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.Charset;
 
 public class Serialiser {
 	private ByteBuffer buff;
 	public Serialiser(){
-		buff = ByteBuffer.allocate(1200);
+		this(ByteBuffer.allocate(1200));
 	}
 	public Serialiser(ByteBuffer buff){
 		this.buff = buff;
+		buff.order(ByteOrder.BIG_ENDIAN);
 	}
 
 	public int remaining(){
@@ -22,13 +24,9 @@ public class Serialiser {
 
 	public static final Charset UTF_8 = Charset.forName("UTF-8");
 
-	public void putEndString(String value){
-		putFixedBytes(value.getBytes(UTF_8));
-		// TODO mark limit?
-	}
-
 	public void putString(String value){
-		putBytes(value.getBytes(UTF_8));
+		putFixedBytes(value.getBytes(UTF_8));
+		putByte((byte) 0);
 	}
 
 	public void putDouble(double value){
@@ -58,6 +56,10 @@ public class Serialiser {
 	public void putBytes(byte[] value, int offset, int length){
 		putLong(length);
 		buff.put(value, offset, length);
+	}
+
+	public void putRawInt(int value){
+		buff.putInt(value);
 	}
 
 	public void putRawLong(long value){
@@ -91,8 +93,11 @@ public class Serialiser {
 
 	public byte[] getResult(){
 		buff.flip();
+		if (!buff.hasRemaining())
+			return null;
 		byte[] ret = new byte[buff.remaining()];
 		buff.get(ret);
+		buff.clear();
 		return ret;
 	}
 }

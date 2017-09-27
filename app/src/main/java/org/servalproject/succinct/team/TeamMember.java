@@ -23,14 +23,14 @@ public class TeamMember {
         @Override
         public TeamMember create(DeSerialiser serialiser) {
             int employeeId = (int)serialiser.getLong();
-            String name = serialiser.getEndString();
+            String name = serialiser.getString();
             return new TeamMember(employeeId, name);
         }
 
         @Override
         public void serialise(Serialiser serialiser, TeamMember object) {
             serialiser.putLong(object.employeeId);
-            serialiser.putEndString(object.name);
+            serialiser.putString(object.name);
         }
     };
 }
