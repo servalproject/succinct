@@ -50,6 +50,10 @@ public class RecordStore {
 	private void readMarks() throws IOException{
 		if (!markFile.exists())
 			return;
+		if (EOF == 0) {
+			markFile.delete();
+			return;
+		}
 		BufferedReader r = new BufferedReader(new FileReader(markFile));
 		try {
 			String line;
