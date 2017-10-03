@@ -323,14 +323,13 @@ public class MainActivity extends AppCompatActivity
     protected void updateIdentity() {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         String myName = prefs.getString(App.MY_NAME, null);
-        int myId = prefs.getInt(App.MY_EMPLOYEE_ID, -1);
+        String myId = prefs.getString(App.MY_EMPLOYEE_ID, null);
 
         TextView name = (TextView) navHeader.findViewById(R.id.nav_name);
         TextView id = (TextView) navHeader.findViewById(R.id.nav_id);
         if (myName!=null) {
             name.setText(myName);
-            String idString = getResources().getString(R.string.id) + " " + myId;
-            id.setText(idString);
+            id.setText(myId);
         } else {
             name.setText(null);
             id.setText(null);

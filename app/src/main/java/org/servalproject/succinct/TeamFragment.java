@@ -77,7 +77,7 @@ public class TeamFragment extends Fragment {
 
         prefs = PreferenceManager.getDefaultSharedPreferences(getActivity());
         String name = prefs.getString(App.MY_NAME, null);
-        int employeeId = prefs.getInt(App.MY_EMPLOYEE_ID, -1);
+        String employeeId = prefs.getString(App.MY_EMPLOYEE_ID, null);
 
         if (app.teamStorage!=null){
             state = TEAM_STATE_ACTIVE;
@@ -95,7 +95,7 @@ public class TeamFragment extends Fragment {
         View view = inflater.inflate(R.layout.fragment_team, container, false);
 
         String name = prefs.getString(App.MY_NAME, null);
-        int employeeId = prefs.getInt(App.MY_EMPLOYEE_ID, -1);
+        String employeeId = prefs.getString(App.MY_EMPLOYEE_ID, null);
 
         View card;
 
@@ -112,8 +112,8 @@ public class TeamFragment extends Fragment {
         }
         if (localEditID != editID) {
             editID = localEditID;
-            if (employeeId > 0) {
-                editID.setText(Integer.toString(employeeId));
+            if (employeeId != null) {
+                editID.setText(employeeId);
             }
             editID.addTextChangedListener(textWatcherIdentity);
         }
@@ -128,11 +128,11 @@ public class TeamFragment extends Fragment {
                     public void onClick(View view) {
                         Log.d(TAG, "Save pressed");
                         String name;
-                        int id;
+                        String id;
                         try {
                             name = editName.getText().toString().trim();
-                            id = Integer.parseInt(editID.getText().toString().trim());
-                        } catch (NullPointerException | NumberFormatException e) {
+                            id = editID.getText().toString().trim();
+                        } catch (NullPointerException e) {
                             return;
                         }
                         if (!isValidIdentity(name, id)) {
@@ -166,7 +166,8 @@ public class TeamFragment extends Fragment {
                 saveButton.setVisibility(View.GONE);
                 TextView identity = (TextView) card.findViewById(R.id.identity_card_text);
                 String escapedName = TextUtils.htmlEncode(name);
-                identity.setText(HtmlCompat.fromHtml(getResources().getString(R.string.identity_summary, escapedName, employeeId)));
+                String escapedId = TextUtils.htmlEncode(employeeId);
+                identity.setText(HtmlCompat.fromHtml(getResources().getString(R.string.identity_summary, escapedName, escapedId)));
                 card.findViewById(R.id.identity_name_layout).setVisibility(View.GONE);
                 card.findViewById(R.id.identity_id_layout).setVisibility(View.GONE);
                 card.setVisibility(View.VISIBLE);
@@ -274,17 +275,17 @@ public class TeamFragment extends Fragment {
                 .commit();
     }
 
-    private boolean isValidIdentity(String name, int id) {
-        return (name != null && name.length() == name.trim().length() && name.trim().length() > 0 && id > 0);
+    private boolean isValidIdentity(String name, String id) {
+        return (name != null && name.length() == name.trim().length() && name.trim().length() > 0 && id != null);
     }
 
-    private void setIdentity(String name, int id) {
+    private void setIdentity(String name, String id) {
         if (!isValidIdentity(name, id))
             throw new IllegalArgumentException();
         Log.d(TAG, "saving new identity; name=\""+name+"\", id="+id);
         SharedPreferences.Editor ed = prefs.edit();
         ed.putString(App.MY_NAME, name);
-        ed.putInt(App.MY_EMPLOYEE_ID, id);
+        ed.putString(App.MY_EMPLOYEE_ID, id);
         ed.apply();
         MainActivity activity = (MainActivity) getActivity();
         activity.updateIdentity();
@@ -356,10 +357,10 @@ public class TeamFragment extends Fragment {
         @Override
         public void afterTextChanged(Editable editable) {
             String name;
-            int id;
+            String id;
             try {
                 name = editName.getText().toString().trim();
-                id = Integer.parseInt(editID.getText().toString().trim());
+                id = editID.getText().toString().trim();
             } catch (NullPointerException | NumberFormatException e) {
                 if (state == TEAM_STATE_EDITING_ID) {
                     saveButton.setEnabled(false);
