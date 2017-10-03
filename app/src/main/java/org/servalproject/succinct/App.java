@@ -47,6 +47,7 @@ public class App extends Application {
 	public static final String TEAM_ID = "team_id";
 	public static final String MY_NAME = "my_name";
 	public static final String MY_EMPLOYEE_ID = "my_employee_id";
+	public static final String PAIRED_ROCK = "paired_rock";
 
 	private PeerId fromPreference(SharedPreferences prefs, String pref){
 		String id = prefs.getString(pref, null);

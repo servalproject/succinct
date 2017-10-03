@@ -60,10 +60,11 @@ public class MessageQueue {
 
 		@Override
 		protected void Visit(PeerId peer, RecordIterator<T> records) throws IOException {
-			records.mark("queue");
+			records.reset("sent");
 			if (findNext(peer, records)){
 				if (queue.containsKey(peer))
 					return;
+				Log.v(TAG, "Remembering "+peer+"/"+records.getFactory().getFileName());
 				queue.put(peer, records);
 				App.backgroundHandler.removeCallbacks(sendRunner);
 				App.backgroundHandler.postDelayed(sendRunner, 500);
@@ -77,16 +78,21 @@ public class MessageQueue {
 				PeerId peerId = e.getKey();
 
 				// always skip peers if they aren't enrolled
-				if (!membershipList.isActive(peerId))
+				if (!membershipList.isActive(peerId)) {
+					Log.v(TAG, "Skipping " + peerId+", not enrolled?");
 					continue;
+				}
 
-				if (membershipList.getPosition(peerId)>255)
+				if (membershipList.getPosition(peerId)>255) {
+					Log.v(TAG, "Skipping " + peerId+", too many?");
 					continue;
+				}
 
 				RecordIterator<T> iterator = e.getValue();
-				iterator.mark("queue");
+				iterator.reset("sent");
 
 				if (!findNext(peerId, iterator)) {
+					Log.v(TAG, "Skipping " + peerId+", no interesting records?");
 					i.remove();
 					continue;
 				}
@@ -181,8 +187,8 @@ public class MessageQueue {
 		};
 
 		services = new IMessaging[]{
-				//new RockTransport(this, app),
-				new DummySMSTransport(this, app)
+				new DummySMSTransport(this, app),
+				new RockTransport(this, app)
 		};
 
 		App.backgroundHandler.removeCallbacks(sendRunner);

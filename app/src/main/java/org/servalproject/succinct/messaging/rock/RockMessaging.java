@@ -142,6 +142,10 @@ public class RockMessaging {
 		observable.notifyObservers();
 	}
 
+	public R7DeviceError getLastError(){
+		return lastError;
+	}
+
 	public String lastAction(){
 		if (lastAction == null)
 			return null;
@@ -212,6 +216,16 @@ public class RockMessaging {
 		}
 	}
 
+	public Device getConnectedDevice(){
+		if (!isConnected())
+			return null;
+		if (devices.containsKey(deviceId))
+			return devices.get(deviceId);
+		Device d = new Device(deviceId, null);
+		devices.put(deviceId, d);
+		return d;
+	}
+
 	public boolean canConnect(){
 		return connectionState == R7ConnectionState.R7ConnectionStateReady ||
 				connectionState == R7ConnectionState.R7ConnectionStateDiscovering;
@@ -226,6 +240,8 @@ public class RockMessaging {
 		setLastAction("Connecting to "+deviceId);
 		checkState();
 		this.deviceId = deviceId;
+		this.lastError = null;
+		this.lockState = null;
 		comms.connect(deviceId);
 	}
 
@@ -246,6 +262,7 @@ public class RockMessaging {
 
 	public void enterPin(short pin){
 		setLastAction("Entering PIN");
+		lockState = null;
 		comms.unlock(pin);
 	}
 

@@ -93,4 +93,8 @@ public class RecordIterator<T> {
 		byte[] bytes = factory.serialise(object);
 		store.appendRecord(bytes);
 	}
+
+	public Factory<T> getFactory() {
+		return factory;
+	}
 }

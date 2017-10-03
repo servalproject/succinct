@@ -2,17 +2,25 @@ package org.servalproject.succinct.messaging;
 
 
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
+import android.util.Log;
 
 import org.servalproject.succinct.App;
+import org.servalproject.succinct.messaging.rock.Device;
 import org.servalproject.succinct.messaging.rock.RockMessage;
 import org.servalproject.succinct.messaging.rock.RockMessaging;
 import org.servalproject.succinct.utils.AndroidObserver;
 
 import java.util.Observable;
 
+import uk.rock7.connect.enums.R7DeviceError;
 import uk.rock7.connect.enums.R7LockState;
 
+import static android.content.ContentValues.TAG;
+
 public class RockTransport extends AndroidObserver implements IMessaging{
+	private final SharedPreferences prefs;
 	private final RockMessaging messaging;
 	private final MessageQueue messageQueue;
 	private boolean messagingRequired=false;
@@ -23,26 +31,9 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 		App app = (App)context.getApplicationContext();
 		messaging = app.getRock();
 		messaging.observable.addObserver(this);
-	}
 
-	private boolean getReady(){
-		if (!messaging.isEnabled()){
-			messaging.enable();
-			return false;
-		}
-
-		if (!messaging.isConnected()){
-			if (messaging.canConnect())
-				messaging.connect(deviceId);
-			return false;
-		}
-
-		if (messaging.getLockState() != R7LockState.R7LockStateUnlocked){
-			messaging.enterPin((short) 1234);
-			return false;
-		}
-
-		return true;
+		prefs = PreferenceManager.getDefaultSharedPreferences(context);
+		deviceId = prefs.getString(App.PAIRED_ROCK, null);
 	}
 
 	private RockMessage sendingMsg;
@@ -50,19 +41,55 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 
 	@Override
 	public int trySend(Fragment fragment) {
-		if (deviceId==null)
+		if (deviceId==null) {
+			Log.v(TAG, "No configured device");
 			return UNAVAILABLE;
+		}
 
 		messagingRequired = true;
-		if (!getReady())
+		if (!messaging.isEnabled()){
+			Log.v(TAG, "Enabling bluetooth");
+			messaging.enable();
+			return BUSY;
+		}
+
+		if (!messaging.isConnected()){
+			R7DeviceError error = messaging.getLastError();
+			if (error != null){
+				Log.e(TAG, "Rock API returned error "+error);
+				return UNAVAILABLE;
+			}
+			if (messaging.canConnect()) {
+				Log.v(TAG, "Initiating connection");
+				messaging.connect(deviceId);
+			}else{
+				Log.v(TAG, "Can't connect (again?) right now");
+			}
+			return BUSY;
+		}
+
+		R7LockState lockState = messaging.getLockState();
+		if (lockState == null)
 			return BUSY;
 
-		if (!messaging.canSendRawMessage())
+		if (lockState == R7LockState.R7LockStateLocked){
+			Log.v(TAG, "Entering PIN");
+			messaging.enterPin((short) 1234);
+			return BUSY;
+		}else if(lockState != R7LockState.R7LockStateUnlocked){
+			Log.v(TAG, "Device is not locked or unlocked "+lockState);
 			return UNAVAILABLE;
+		}
+
+		if (!messaging.canSendRawMessage()) {
+			Log.v(TAG, "Raw messaging is not available!");
+			return UNAVAILABLE;
+		}
 
 		if (sendingMsg != null)
 			return BUSY;
 
+		Log.v(TAG, "Sending message");
 		sendingMsg = messaging.sendRawMessage(fragment.bytes);
 		sendingFragment = fragment;
 		return SUCCESS;
@@ -85,21 +112,26 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 
 	@Override
 	public void observe(Observable observable, Object obj) {
-		if (obj!=null && obj instanceof RockMessage){
-			RockMessage m = (RockMessage)obj;
-			if (m.completed && m == sendingMsg){
+		if (obj != null && obj instanceof RockMessage) {
+			RockMessage m = (RockMessage) obj;
+			if (m.completed && m == sendingMsg) {
 				// TODO, callback to indicate success / failure of delivery && state changed
 				sendingMsg = null;
 				sendingFragment = null;
 				messageQueue.onStateChanged();
 			}
-		}
-		if (messagingRequired) {
-			if (getReady()){
-				// TODO, callback to indicate state changed
+		} else if (messagingRequired) {
+			messageQueue.onStateChanged();
+		} else if (deviceId == null) {
+			Device connected = messaging.getConnectedDevice();
+			if (connected != null) {
+				Log.v(TAG, "Remembering connection to "+connected.id+" for automatic messaging");
+				deviceId = connected.id;
+				SharedPreferences.Editor ed = prefs.edit();
+				ed.putString(App.PAIRED_ROCK, deviceId);
+				ed.apply();
+				messageQueue.onStateChanged();
 			}
-		}else{
-			tearDown();
 		}
 	}
 }

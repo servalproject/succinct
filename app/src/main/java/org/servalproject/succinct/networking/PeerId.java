@@ -10,7 +10,7 @@ import java.util.Arrays;
 public class PeerId {
 	// How long does an ID need to be?
 	public static final int LEN=8;
-	private final byte[] id;
+	public final byte[] id;
 
 	public PeerId(String value){
 		id = Hex.fromString(value);
