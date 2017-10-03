@@ -208,11 +208,6 @@ public class Networks {
 				case StoreStateMessage:
 					processStoreState(peer, (StoreState)msg);
 					break;
-				case TeamMessage:
-					Team team = (Team)msg;
-					knownTeams.put(team.id, team);
-					teams.notifyObservers(team);
-					break;
 			}
 			msg.process(peer);
 		}
@@ -222,9 +217,16 @@ public class Networks {
 		return knownTeams.values();
 	}
 
+	public void processTeamMessage(Team team){
+		Log.v(TAG, "Storing info about team "+team.id+" "+team.name);
+		knownTeams.put(team.id, team);
+		teams.notifyObservers(team);
+	}
+
 	private void processStoreState(Peer peer, StoreState state){
 		if (knownTeams.containsKey(state.teamId))
 			return;
+		Log.v(TAG, "Asking for information about "+state.teamId);
 		peer.getConnection().queue(new RequestTeam(state.teamId));
 	}
 

@@ -62,6 +62,7 @@ public class Team extends Message<Team>{
 
     @Override
     public void process(Peer peer) {
+        peer.appContext.networks.processTeamMessage(this);
     }
 
     @Override
