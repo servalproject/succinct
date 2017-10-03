@@ -16,7 +16,7 @@
             android:title="@string/nav_chat" />
         <item
             android:id="@+id/nav_rock"
-            android:icon="@drawable/ic_menu_chat"
+            android:icon="@drawable/ic_menu_iridium"
             android:title="@string/nav_rock" />
     </group>
 
