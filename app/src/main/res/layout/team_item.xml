@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/team_item_background">
+
+    <TextView android:id="@+id/team_name"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp"
+        android:textSize="16sp"
+        tools:text="Team name" />
+    <!--
+    <TextView android:id="@+id/team_leader"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:paddingBottom="4dp"
+        tools:text="Leader name" />
+        -->
+</LinearLayout>

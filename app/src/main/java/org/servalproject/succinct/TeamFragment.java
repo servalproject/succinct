@@ -11,6 +11,7 @@ import android.preference.PreferenceManager;
 import android.support.annotation.IntDef;
 import android.support.design.widget.TextInputEditText;
 import android.support.v7.app.AlertDialog;
+import android.support.v7.widget.RecyclerView;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextUtils;
@@ -19,15 +20,14 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import org.servalproject.succinct.networking.PeerId;
 import org.servalproject.succinct.team.Team;
+import org.servalproject.succinct.team.TeamAdapter;
 import org.servalproject.succinct.utils.AndroidObserver;
 import org.servalproject.succinct.utils.HtmlCompat;
 
@@ -36,7 +36,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Collection;
 import java.util.Observable;
-
 
 public class TeamFragment extends Fragment {
     private static final String TAG = "TeamFragment";
@@ -54,8 +53,11 @@ public class TeamFragment extends Fragment {
     private TextInputEditText editID;
     private Button saveButton;
     private Button editButton;
+    private Button joinButton;
     private App app;
     private SharedPreferences prefs;
+    private TeamAdapter teamAdapter = new TeamAdapter(this);
+    private ProgressBar progress;
 
     @TeamState int state;
 
@@ -147,6 +149,7 @@ public class TeamFragment extends Fragment {
                 editButton.setVisibility(View.GONE);
                 saveButton.setVisibility(View.VISIBLE);
                 card.setVisibility(View.VISIBLE);
+                progress = null;
                 break;
             case TEAM_STATE_SCANNING:
             case TEAM_STATE_JOINING: // todo handle currently-joining case
@@ -170,23 +173,26 @@ public class TeamFragment extends Fragment {
                 // team selection card
                 card = view.findViewById(R.id.team_select_card);
                 card.setVisibility(View.VISIBLE);
-                ProgressBar progress = (ProgressBar) card.findViewById(R.id.team_list_progress_bar);
-                progress.setVisibility(View.VISIBLE);
-                Button join = (Button) card.findViewById(R.id.join_team_button);
-                join.setOnClickListener(new View.OnClickListener() {
+                progress = (ProgressBar) card.findViewById(R.id.team_list_progress_bar);
+                RecyclerView teamList = (RecyclerView) card.findViewById(R.id.team_list);
+                teamList.setAdapter(teamAdapter);
+                progress.setVisibility(teamAdapter.getItemCount() == 0 ? View.VISIBLE : View.GONE);
+                joinButton = (Button) card.findViewById(R.id.join_team_button);
+                joinButton.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View view) {
-                        // TODO select team from list
                         try {
-                            app.joinTeam(new PeerId("0100000000000000"));
+                            Team t = teamAdapter.getSelected();
+                            if (t == null) return;
+                            app.joinTeam(t.id);
                             state = TEAM_STATE_ACTIVE;
                             redraw();
-                            if (false) throw new IOException();
                         } catch (IOException e) {
                             throw new IllegalStateException(e);
                         }
                     }
                 });
+                joinButton.setEnabled(false);
                 Button start = (Button) card.findViewById(R.id.start_new_team_button);
                 start.setOnClickListener(new View.OnClickListener() {
                     @Override
@@ -213,16 +219,25 @@ public class TeamFragment extends Fragment {
                 card.setVisibility(View.VISIBLE);
                 TextView teamName = (TextView) card.findViewById(R.id.team_name);
                 teamName.setText(myTeamName);
+                progress = null;
         }
         return view;
+    }
+
+    public void onTeamSelectedChange() {
+        if (state != TEAM_STATE_SCANNING || joinButton == null) return;
+        joinButton.setEnabled(teamAdapter.getSelected() != null);
     }
 
     private final AndroidObserver teamObserver = new AndroidObserver() {
         @Override
         public void observe(Observable observable, Object o) {
             Team t = (Team)o;
-            // TODO add / update team in list
             Log.v(TAG, "Team observed; "+t.toString());
+            if (progress != null && teamAdapter.getItemCount() == 0) {
+                progress.setVisibility(View.GONE);
+            }
+            teamAdapter.addTeam(t);
         }
     };
 
@@ -233,10 +248,13 @@ public class TeamFragment extends Fragment {
         super.onStart();
         if (state == TEAM_STATE_SCANNING || state == TEAM_STATE_JOINING) {
             app.networks.teams.addObserver(teamObserver);
-            // TODO add teams to a list....
             Collection<Team> teams = app.networks.getTeams();
             for(Team t:teams)
                 Log.v(TAG, "Team; "+t.toString());
+            teamAdapter.setTeams(teams);
+            if (progress != null && teams.size() > 0) {
+                progress.setVisibility(View.GONE);
+            }
             observing = true;
         }
     }

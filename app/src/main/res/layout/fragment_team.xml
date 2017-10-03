@@ -154,7 +154,10 @@
                         android:id="@+id/team_list"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:fadeScrollbars="false" />
+                        android:fadeScrollbars="false"
+                        android:scrollbars="vertical"
+                        app:layoutManager="android.support.v7.widget.LinearLayoutManager"
+                        tools:listitem="@layout/team_item"/>
 
                     <ProgressBar
                         android:id="@+id/team_list_progress_bar"
