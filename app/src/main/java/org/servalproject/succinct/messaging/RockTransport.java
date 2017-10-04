@@ -24,7 +24,6 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 	private final RockMessaging messaging;
 	private final MessageQueue messageQueue;
 	private boolean messagingRequired=false;
-	private String deviceId;
 
 	public RockTransport(MessageQueue messageQueue, Context context){
 		this.messageQueue = messageQueue;
@@ -33,18 +32,20 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 		messaging.observable.addObserver(this);
 
 		prefs = PreferenceManager.getDefaultSharedPreferences(context);
-		deviceId = prefs.getString(App.PAIRED_ROCK, null);
 	}
 
 	private RockMessage sendingMsg;
 	private Fragment sendingFragment;
 
 	@Override
-	public int trySend(Fragment fragment) {
-		if (deviceId==null) {
-			Log.v(TAG, "No configured device");
+	public int getMTU() {
+		return 338;
+	}
+
+	public int checkAvailable(){
+		String deviceId = prefs.getString(App.PAIRED_ROCK, null);
+		if (deviceId==null)
 			return UNAVAILABLE;
-		}
 
 		messagingRequired = true;
 		if (!messaging.isEnabled()){
@@ -89,8 +90,17 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 		if (sendingMsg != null)
 			return BUSY;
 
+		return SUCCESS;
+	}
+
+	@Override
+	public int trySend(Fragment fragment) {
+		int available = checkAvailable();
+		if (available != SUCCESS)
+			return available;
+
 		Log.v(TAG, "Sending message");
-		sendingMsg = messaging.sendRawMessage(fragment.bytes);
+		sendingMsg = messaging.sendRawMessage((short)fragment.seq, fragment.bytes);
 		sendingFragment = fragment;
 		return SUCCESS;
 	}
@@ -116,21 +126,27 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 			RockMessage m = (RockMessage) obj;
 			if (m.completed && m == sendingMsg) {
 				// TODO, callback to indicate success / failure of delivery && state changed
+				// Lets annoy everyone by beeping every time we sent something
+				messaging.requestBeep();
 				sendingMsg = null;
 				sendingFragment = null;
 				messageQueue.onStateChanged();
 			}
 		} else if (messagingRequired) {
 			messageQueue.onStateChanged();
-		} else if (deviceId == null) {
-			Device connected = messaging.getConnectedDevice();
-			if (connected != null) {
-				Log.v(TAG, "Remembering connection to "+connected.id+" for automatic messaging");
-				deviceId = connected.id;
-				SharedPreferences.Editor ed = prefs.edit();
-				ed.putString(App.PAIRED_ROCK, deviceId);
-				ed.apply();
-				messageQueue.onStateChanged();
+		} else {
+			// TODO settings dialog to ask the user explicitly to use this device
+			String deviceId = prefs.getString(App.PAIRED_ROCK, null);
+			if (deviceId == null) {
+				Device connected = messaging.getConnectedDevice();
+				if (connected != null) {
+					Log.v(TAG, "Remembering connection to "+connected.id+" for automatic messaging");
+					deviceId = connected.id;
+					SharedPreferences.Editor ed = prefs.edit();
+					ed.putString(App.PAIRED_ROCK, deviceId);
+					ed.apply();
+					messageQueue.onStateChanged();
+				}
 			}
 		}
 	}

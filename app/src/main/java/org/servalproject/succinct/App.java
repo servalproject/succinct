@@ -24,6 +24,7 @@ import java.io.IOException;
 public class App extends Application {
 	public static Handler UIHandler;
 	private RockMessaging rock;
+	private SharedPreferences prefs;
 	public Storage teamStorage;
 	public Networks networks;
 	public MembershipList membershipList;
@@ -43,17 +44,24 @@ public class App extends Application {
 		System.loadLibrary("native-lib");
 	}
 
+	// All the preference names we're using anywhere in the app
 	public static final String MY_ID = "my_id";
 	public static final String TEAM_ID = "team_id";
 	public static final String MY_NAME = "my_name";
 	public static final String MY_EMPLOYEE_ID = "my_employee_id";
 	public static final String PAIRED_ROCK = "paired_rock";
+	public static final String SMS_DESTINATION = "sms_destination";
+	public static final String BASE_SERVER_URL = "base_server_url";
 
 	private PeerId fromPreference(SharedPreferences prefs, String pref){
 		String id = prefs.getString(pref, null);
 		if (id==null || id.length() != PeerId.LEN*2)
 			return null;
 		return new PeerId(id);
+	}
+
+	public SharedPreferences getPrefs(){
+		return prefs;
 	}
 
 	@Override
@@ -65,7 +73,7 @@ public class App extends Application {
 		backgroundHandler = new Handler(backgroundThread.getLooper());
 
 		try {
-			SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+			prefs = PreferenceManager.getDefaultSharedPreferences(this);
 			PeerId myId = fromPreference(prefs, MY_ID);
 			if (myId == null){
 				myId = new PeerId();

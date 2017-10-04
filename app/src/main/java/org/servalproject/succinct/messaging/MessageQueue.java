@@ -1,6 +1,9 @@
 package org.servalproject.succinct.messaging;
 
 
+import android.content.Context;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.util.Log;
 
 import org.servalproject.succinct.App;
@@ -19,9 +22,14 @@ import org.servalproject.succinct.team.TeamMember;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.RandomAccessFile;
+import java.io.Reader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -29,13 +37,16 @@ import java.util.Map;
 
 // Manage the queue of outgoing messages / fragments
 public class MessageQueue {
+	private final App app;
 	private final Team myTeam;
 	private final Storage store;
 	private final RecordIterator<Fragment> fragments;
 	private final RecordIterator<Membership> members;
 	private final RecordIterator<Team> team;
 	public final IMessaging[] services;
+	private final int MTU;
 	private final MembershipList membershipList;
+	private final ConnectivityManager connectivityManager;
 	private int nextFragmentSeq;
 	private static final String TAG = "MessageQueue";
 
@@ -69,6 +80,10 @@ public class MessageQueue {
 				App.backgroundHandler.removeCallbacks(sendRunner);
 				App.backgroundHandler.postDelayed(sendRunner, 500);
 			}
+		}
+
+		boolean hasMessage(){
+			return !queue.isEmpty();
 		}
 
 		boolean nextMessage() throws IOException {
@@ -108,10 +123,9 @@ public class MessageQueue {
 		}
 	}
 
-	private static final int FRAGMENT_MTU=200;
-	private static final int PAYLOAD_MTU=200 - 13;
-
 	public MessageQueue(App app, final Team myTeam) throws IOException {
+		this.app = app;
+		connectivityManager = (ConnectivityManager)app.getSystemService(Context.CONNECTIVITY_SERVICE);
 		store = app.teamStorage;
 		this.myTeam = myTeam;
 		membershipList = app.membershipList;
@@ -121,17 +135,32 @@ public class MessageQueue {
 
 		fragments = store.openIterator(Fragment.factory, "messaging");
 		Fragment last = fragments.readLast();
-		if (last != null){
-			ByteBuffer b = ByteBuffer.wrap(last.bytes);
-			b.order(ByteOrder.BIG_ENDIAN);
-			nextFragmentSeq = b.getInt(8)+1;
+		if (last != null)
+			nextFragmentSeq = last.seq+1;
+
+		services = new IMessaging[]{
+				new SMSTransport(this, app),
+				new RockTransport(this, app)
+		};
+
+		// find the smallest mtu we must support
+		int mtu = 0x7FFFFFFF;
+		for (int i=0;i<services.length;i++){
+			mtu = Math.min(services[i].getMTU(), mtu);
 		}
+
+		// round down to nearest 50 bytes to limit wasted iridium credits
+		if ((mtu % 50)!=0)
+			mtu -= mtu % 50;
+
+		MTU = mtu;
+		Log.v(TAG, "Using MTU = "+mtu);
 
 		RandomAccessFile f = new RandomAccessFile(new File(store.root,"partial_fragment"), "rw");
 		boolean empty = f.length() == 0;
 
-		f.setLength(FRAGMENT_MTU+4);
-		fragmentBuff = f.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, FRAGMENT_MTU+4);
+		f.setLength(MTU+4);
+		fragmentBuff = f.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, MTU+4);
 
 		if (empty) {
 			fragmentBuff.putInt(0, 0);
@@ -139,6 +168,8 @@ public class MessageQueue {
 			// recover pre-quit fragment?
 			int size = fragmentBuff.getInt();
 			fragmentBuff.position(size+fragmentBuff.position());
+			if (size>0)
+				nextFragmentSeq = fragmentBuff.getInt(4 + PeerId.LEN)+1;
 			Log.v(TAG, "Reset fragment buffer to "+size);
 		}
 
@@ -184,11 +215,6 @@ public class MessageQueue {
 				Log.v(TAG, "Sending chat message  from "+records.getOffset());
 				fragmentMessage(MESSAGE, serialiser.getResult());
 			}
-		};
-
-		services = new IMessaging[]{
-				new DummySMSTransport(this, app),
-				new RockTransport(this, app)
 		};
 
 		App.backgroundHandler.removeCallbacks(sendRunner);
@@ -251,8 +277,6 @@ public class MessageQueue {
 		while (offset < length) {
 			int len = length - offset;
 
-			if (len > PAYLOAD_MTU)
-				len = PAYLOAD_MTU;
 			if (len > fragmentBuff.remaining())
 				len = fragmentBuff.remaining();
 
@@ -277,6 +301,7 @@ public class MessageQueue {
 
 	private boolean teamState() throws IOException{
 		boolean ret = false;
+		team.reset("sent");
 		while (team.next()){
 			Serialiser serialiser = new Serialiser();
 			Team record = team.read();
@@ -325,6 +350,23 @@ public class MessageQueue {
 		return sent;
 	}
 
+	private boolean hasNext() throws IOException {
+		fragments.reset("sending");
+		if (fragments.next())
+			return true;
+		members.reset("sent");
+		if (members.next())
+			return true;
+		team.reset("sent");
+		if (team.next())
+			return true;
+		if (chatWatcher.hasMessage())
+			return true;
+		if (formWatcher.hasMessage())
+			return true;
+		return false;
+	}
+
 	private boolean nextMessage() throws IOException {
 		// Look for something to send in priority order;
 		int seq = nextFragmentSeq;
@@ -349,20 +391,159 @@ public class MessageQueue {
 		return true;
 	}
 
-	public void sendNext(){
-		Log.v(TAG, "sendNext");
+	private void markAck(int seq) throws IOException {
+		if (seq <-1 || seq >= nextFragmentSeq)
+			throw new IllegalStateException("Sequence out of range ("+seq+", "+nextFragmentSeq+")");
+
+		if (seq <0){
+			fragments.start();
+			fragments.next();
+			fragments.mark("http_acked");
+			return;
+		}
+
+		int first = 0;
+		int last = nextFragmentSeq -1;
+		{
+			Fragment current = fragments.read();
+			if (current != null) {
+				int currentSeq = current.seq;
+				if (seq >= currentSeq)
+					first = currentSeq;
+				else
+					last = currentSeq;
+			}
+		}
+		boolean forwards = (seq - first) < (last - seq);
+		if (forwards && first == 0) {
+			fragments.start();
+			if (!fragments.next())
+				throw new IllegalStateException("Seq "+seq+" not found!");
+		}
+		if (!forwards && last == nextFragmentSeq -1) {
+			fragments.end();
+			if (!fragments.prev())
+				throw new IllegalStateException("Seq "+seq+" not found!");
+		}
+		while(true){
+			Fragment fragment = fragments.read();
+			if (fragment.seq == seq) {
+				fragments.next();
+				fragments.mark("http_acked");
+				return;
+			}
+			if (!(forwards ? fragments.next() : fragments.prev()))
+				break;
+		}
+		throw new IllegalStateException("Seq "+seq+" not found!");
+	}
+
+	private String read(InputStream stream) throws IOException {
+		final char[] buffer = new char[512];
+		final StringBuilder out = new StringBuilder();
+		Reader in = new InputStreamReader(stream, "UTF-8");
+		while(true) {
+			int rsz = in.read(buffer, 0, buffer.length);
+			if (rsz < 0)
+				break;
+			out.append(buffer, 0, rsz);
+		}
+		in.close();
+		return out.toString();
+	}
+
+	private void sendViaHttp(){
+		String baseUrl = app.getPrefs().getString(App.BASE_SERVER_URL, null);
+		if (baseUrl == null)
+			return;
+
+		NetworkInfo network = connectivityManager.getActiveNetworkInfo();
+		if (network == null || !network.isConnected())
+			return;
+
 		try {
+			fragments.reset("http_acked");
+			// If we've already acked them all, skip the connection to the server
+			if (fragments.next()){
+				// double check the latest ack sequence with the server
+				URL url = new URL(baseUrl+"/succinct/api/v1/ack/"+store.teamId);
+				HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+				connection.setRequestProperty("Connection", "keep-alive");
+				connection.connect();
+				int response = connection.getResponseCode();
+				if (response == 404){
+					markAck(-1);
+				}else if (response == 200){
+					markAck(Integer.parseInt(read((InputStream)connection.getContent())));
+				}else{
+					Log.e(TAG, "Unexpected http response code "+response);
+					return;
+				}
+			}
+
+			while(true){
+				Fragment sendFragment = fragments.read();
+				if (sendFragment == null){
+					// If we reach the end of the fragment list, we can avoid other transports
+					fragments.mark("sending");
+					if (!(nextMessage() && fragments.next())) {
+						return;
+					}
+					continue;
+				}
+
+				URL url = new URL(baseUrl+"/succinct/api/v1/uploadFragment/"+store.teamId);
+				HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+				connection.setRequestMethod("POST");
+				connection.setRequestProperty("Connection", "keep-alive");
+				connection.setFixedLengthStreamingMode(sendFragment.bytes.length);
+				connection.connect();
+				OutputStream out = connection.getOutputStream();
+				out.write(sendFragment.bytes);
+				out.close();
+				int response = connection.getResponseCode();
+				if (response!=200){
+					Log.e(TAG, "Unexpected http response code "+response);
+					return;
+				}
+
+				markAck(Integer.parseInt(read((InputStream)connection.getContent())));
+			}
+		} catch (IOException e) {
+			Log.e(TAG, e.getMessage(), e);
+		}
+	}
+
+	private void sendNextFragment(){
+		Log.v(TAG, "sendNextFragment");
+		try {
+			// Check if we have or can build a new fragment
+			if (!hasNext())
+				return;
+
+			// Check that we have at least one service that is ready to deliver a fragment
+			int status = IMessaging.UNAVAILABLE;
+			for (int i = 0; i < services.length && status == IMessaging.UNAVAILABLE; i++){
+				status = services[i].checkAvailable();
+			}
+			if (status != IMessaging.SUCCESS)
+				return;
+
+			// Now we can actually fragment the next message
+			// and try to send fragments
+
 			fragments.reset("sending");
 			while (true) {
 				if (!fragments.next()){
 					if (!(nextMessage() && fragments.next())) {
 						// tell each service they can teardown their connection now.
+						// since we have run out of fragments
 						for (int i = 0; i < services.length; i++)
 							services[i].done();
 						break;
 					}
 				}
-				int status = IMessaging.UNAVAILABLE;
+				status = IMessaging.UNAVAILABLE;
 
 				Fragment send = fragments.read();
 				Log.v(TAG, "Attempting to send fragment @"+fragments.getOffset());
@@ -384,7 +565,8 @@ public class MessageQueue {
 	private final Runnable sendRunner = new Runnable() {
 		@Override
 		public void run() {
-			sendNext();
+			sendViaHttp();
+			sendNextFragment();
 		}
 	};
 

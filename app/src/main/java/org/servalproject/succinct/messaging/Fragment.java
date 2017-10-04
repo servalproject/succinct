@@ -6,12 +6,17 @@ import org.servalproject.succinct.storage.Factory;
 import org.servalproject.succinct.storage.Serialiser;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 public class Fragment  {
+	public final int seq;
 	public final byte[] bytes;
 
 	public Fragment(byte[] bytes){
 		this.bytes = bytes;
+		ByteBuffer b = ByteBuffer.wrap(bytes);
+		b.order(ByteOrder.BIG_ENDIAN);
+		seq = b.getInt(8);
 	}
 
 	public static final Factory<Fragment> factory = new Factory<Fragment>() {

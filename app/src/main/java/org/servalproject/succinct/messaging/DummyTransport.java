@@ -12,7 +12,7 @@ import org.servalproject.succinct.App;
 import org.servalproject.succinct.networking.Hex;
 
 // placeholder to test messaging
-public class DummySMSTransport implements IMessaging{
+public class DummyTransport implements IMessaging{
 	private final MessageQueue queue;
 	// use flight mode as a proxy for availability
 	private boolean airplaneMode;
@@ -28,7 +28,7 @@ public class DummySMSTransport implements IMessaging{
 		}
 	};
 
-	public DummySMSTransport(MessageQueue queue, Context context){
+	public DummyTransport(MessageQueue queue, Context context){
 		this.queue = queue;
 		IntentFilter filter = new IntentFilter();
 		filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
@@ -42,12 +42,26 @@ public class DummySMSTransport implements IMessaging{
 	}
 
 	@Override
-	public int trySend(Fragment fragment) {
+	public int getMTU() {
+		return 200;
+	}
+
+	@Override
+	public int checkAvailable() {
+		if (airplaneMode)
+			return UNAVAILABLE;
+
 		if (sending != null)
 			return BUSY;
 
-		if (airplaneMode)
-			return UNAVAILABLE;
+		return SUCCESS;
+	}
+
+	@Override
+	public int trySend(Fragment fragment) {
+		int available = checkAvailable();
+		if (available!=SUCCESS)
+			return available;
 
 		sending = fragment;
 		Log.v(TAG, "Sending "+ Hex.toString(fragment.bytes));

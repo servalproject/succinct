@@ -5,6 +5,8 @@ public interface IMessaging {
 	int BUSY=1;
 	int SUCCESS=2;
 
+	int getMTU();
+	int checkAvailable();
 	int trySend(Fragment fragment);
 	void done();
 }

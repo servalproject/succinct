@@ -297,15 +297,24 @@ public class RockMessaging {
 		return b!=null && b;
 	}
 
-	private short nextId=0;
 	public RockMessage sendMessage(byte bytes[]){
 		setLastAction("Sending Message");
-		return newMessage(comms.sendMessageWithDataAndIdentifier(bytes, nextId++));
+		return newMessage(comms.sendMessageWithData(bytes));
+	}
+
+	public RockMessage sendMessage(short seq, byte bytes[]){
+		setLastAction("Sending Message");
+		return newMessage(comms.sendMessageWithDataAndIdentifier(bytes, seq));
 	}
 
 	public RockMessage sendRawMessage(byte bytes[]){
 		setLastAction("Sending Raw Message");
-		return newMessage(comms.sendRawMessageWithDataAndIdentifier(bytes, nextId++));
+		return newMessage(comms.sendRawMessageWithData(bytes));
+	}
+
+	public RockMessage sendRawMessage(short seq, byte bytes[]){
+		setLastAction("Sending Raw Message");
+		return newMessage(comms.sendRawMessageWithDataAndIdentifier(bytes, seq));
 	}
 
 	private RockMessage newMessage(short id){
