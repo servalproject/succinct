@@ -85,16 +85,23 @@ public class LocationFactory extends Factory<Location>{
 	 */
 	private static final float[] accLookup = {10f, 20f, 50f, 100f, 200f, 500f, 1000f};
 	private static final double latLngScale = 23301.686;
-	public static void packLatLngAcc(byte[] array, int offset, Location loc) {
+
+	public static byte[] packLatLngAcc(Location loc) {
+		byte[] ret = new byte[6];
+		packLatLngAcc(ret, 0, loc);
+		return ret;
+	}
+
+	public static int packLatLngAcc(byte[] array, int offset, Location loc) {
+		return packLatLngAcc(array, offset, loc.getLatitude(), loc.getLongitude(), loc.getAccuracy());
+	}
+
+	public static int packLatLngAcc(byte[] array, int offset, double lat, double lng, float acc) {
 		if (offset+5 >= array.length)
 			throw new IllegalArgumentException();
 
-		double lat = loc.getLatitude();
-		double lng = loc.getLongitude();
-		float acc = loc.getAccuracy();
-
-		int pLat = (int) ((90.0+lat)*latLngScale);
-		int pLng = (int) ((180.0+lng)*latLngScale);
+		long pLat = (long) ((90.0+lat)*latLngScale);
+		long pLng = (long) ((180.0+lng)*latLngScale);
 		int pAcc = 0;
 		while (pAcc < accLookup.length && acc > accLookup[pAcc]) pAcc++;
 
@@ -109,5 +116,7 @@ public class LocationFactory extends Factory<Location>{
 		array[offset+3] = (byte) ((data >> 16) & 0xff);
 		array[offset+4] = (byte) ((data >> 8) & 0xff);
 		array[offset+5] = (byte) (data & 0xff);
+
+		return 6;
 	}
 }

@@ -68,7 +68,15 @@ public class Serialiser {
 
 	// Time since epoc in 0.1s
 	public void putTime(long value, long epoc){
-		putRawInt((int) ((value - epoc)/100));
+		if (value < epoc)
+			putRawInt(0);
+		else{
+			long delta = (value - epoc)/100;
+			if (delta>0x7FFFFFFF)
+				putRawInt(0x7FFFFFFF);
+			else
+				putRawInt((int)delta);
+		}
 	}
 
 	public void putLong(long value){

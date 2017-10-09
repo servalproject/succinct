@@ -225,7 +225,7 @@ public class Networks {
 		if (networks.isEmpty() || !backgroundEnabled)
 			return;
 
-		alarm.setAlarm(SystemClock.elapsedRealtime()+delay);
+		alarm.setAlarm(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime()+delay);
 	}
 
 	// called from JNI

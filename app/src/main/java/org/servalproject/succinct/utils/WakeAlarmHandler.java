@@ -25,8 +25,8 @@ public class WakeAlarmHandler extends WakeAlarm{
 
 	@TargetApi(Build.VERSION_CODES.N)
 	@Override
-	protected void internalSet(long nextAlarm) {
-		am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+	protected void internalSet(int flag, long nextAlarm) {
+		am.setExact(flag,
 				nextAlarm,
 				tag,
 				listener,

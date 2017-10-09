@@ -53,18 +53,18 @@ public class WakeAlarmReceiver extends WakeAlarm {
 	}
 
 	@Override
-	protected void internalSet(long nextAlarm) {
+	protected void internalSet(int flag, long nextAlarm) {
 		alarmIntent = PendingIntent.getBroadcast(
 				context,
 				0,
 				new Intent(actionName),
 				PendingIntent.FLAG_UPDATE_CURRENT);
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-			am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+			am.setExact(flag,
 					nextAlarm,
 					alarmIntent);
 		}else{
-			am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
+			am.set(flag,
 					nextAlarm,
 					alarmIntent);
 		}

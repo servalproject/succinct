@@ -59,6 +59,7 @@ public class App extends Application {
 	// to send a text message
 	public static final String MESSAGE_DELAY = "message_delay";
 	// minimum delay before sending a location update
+	public static final String LOCATION_INTERVAL = "location_interval";
 
 	private PeerId fromPreference(SharedPreferences prefs, String pref){
 		String id = prefs.getString(pref, null);

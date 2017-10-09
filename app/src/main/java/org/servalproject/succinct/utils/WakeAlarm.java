@@ -14,6 +14,7 @@ public abstract class WakeAlarm {
 	protected final Handler handler;
 	protected final AlarmManager am;
 	protected final String tag;
+	protected int flag;
 	protected long nextAlarm=-1;
 	protected final Runnable onAlarm;
 	protected static final String TAG = "WakeAlarm";
@@ -35,24 +36,29 @@ public abstract class WakeAlarm {
 	}
 
 	protected abstract void internalCancel();
-	protected abstract void internalSet(long nextAlarm);
+	protected abstract void internalSet(int flag, long nextAlarm);
 
-	public void setAlarm(long elapsedTime){
+	public void setAlarm(int flag, long elapsedTime){
+		if (flag == this.flag && elapsedTime == this.nextAlarm)
+			return;
 		cancel();
-		if (elapsedTime <= SystemClock.elapsedRealtime()){
+		this.flag = flag;
+		nextAlarm = elapsedTime;
+		if ((flag == AlarmManager.ELAPSED_REALTIME || flag == AlarmManager.ELAPSED_REALTIME_WAKEUP)
+			&& elapsedTime <= SystemClock.elapsedRealtime()){
 			acquire();
 			//Log.v(TAG, "Running alarm "+tag+" now");
 			handler.post(new Runnable() {
 				@Override
 				public void run() {
+					nextAlarm = -1;
 					onAlarm.run();
 					release();
 				}
 			});
 		}else {
 			//Log.v(TAG, "Setting alarm "+tag+" for "+(elapsedTime - SystemClock.elapsedRealtime())+"ms");
-			internalSet(elapsedTime);
-			nextAlarm = elapsedTime;
+			internalSet(flag, elapsedTime);
 		}
 	}
 

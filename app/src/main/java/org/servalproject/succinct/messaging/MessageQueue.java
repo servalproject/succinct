@@ -1,7 +1,9 @@
 package org.servalproject.succinct.messaging;
 
 
+import android.app.AlarmManager;
 import android.content.Context;
+import android.location.Location;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.SystemClock;
@@ -10,8 +12,8 @@ import android.util.Log;
 import org.servalproject.succinct.App;
 import org.servalproject.succinct.chat.StoredChatMessage;
 import org.servalproject.succinct.forms.Form;
+import org.servalproject.succinct.location.LocationFactory;
 import org.servalproject.succinct.networking.PeerId;
-import org.servalproject.succinct.storage.Factory;
 import org.servalproject.succinct.storage.RecordIterator;
 import org.servalproject.succinct.storage.Serialiser;
 import org.servalproject.succinct.storage.Storage;
@@ -33,9 +35,6 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
 
 // Manage the queue of outgoing messages / fragments
 public class MessageQueue {
@@ -57,74 +56,11 @@ public class MessageQueue {
 	private final QueueWatcher<Form> formWatcher;
 	private final QueueWatcher<StoredChatMessage> chatWatcher;
 
+	private final LocationQueueWatcher locationWatcher;
+	private long nextLocationMessage=-1;
+
 	private final ByteBuffer fragmentBuff;
 	private long fragmentDeadline;
-
-	abstract class QueueWatcher<T> extends StorageWatcher<T>{
-		private final HashMap<PeerId, RecordIterator<T>> queue = new HashMap<>();
-
-		public QueueWatcher(Storage store, Factory<T> factory) {
-			super(App.backgroundHandler, store, factory);
-			activate();
-		}
-
-		boolean findNext(PeerId peer, RecordIterator<T> records) throws IOException {
-			return records.next();
-		}
-		abstract void generateMessage(PeerId peer, RecordIterator<T> records) throws IOException;
-
-		@Override
-		protected void Visit(PeerId peer, RecordIterator<T> records) throws IOException {
-			records.reset("sent");
-			if (findNext(peer, records)){
-				if (queue.containsKey(peer))
-					return;
-				Log.v(TAG, "Remembering "+peer+"/"+records.getFactory().getFileName());
-				queue.put(peer, records);
-				alarm.setAlarm(SystemClock.elapsedRealtime());
-			}
-		}
-
-		boolean hasMessage(){
-			return !queue.isEmpty();
-		}
-
-		boolean nextMessage() throws IOException {
-			Iterator<Map.Entry<PeerId, RecordIterator<T>>> i = queue.entrySet().iterator();
-			while(i.hasNext()) {
-				Map.Entry<PeerId, RecordIterator<T>> e = i.next();
-				PeerId peerId = e.getKey();
-
-				// always skip peers if they aren't enrolled
-				if (!membershipList.isActive(peerId)) {
-					Log.v(TAG, "Skipping " + peerId+", not enrolled?");
-					continue;
-				}
-
-				if (membershipList.getPosition(peerId)>255) {
-					Log.v(TAG, "Skipping " + peerId+", too many?");
-					continue;
-				}
-
-				RecordIterator<T> iterator = e.getValue();
-				iterator.reset("sent");
-
-				if (!findNext(peerId, iterator)) {
-					Log.v(TAG, "Skipping " + peerId+", no interesting records?");
-					i.remove();
-					continue;
-				}
-
-				generateMessage(peerId, iterator);
-
-				if (!findNext(peerId, iterator))
-					i.remove();
-				iterator.mark("sent");
-				return true;
-			}
-			return false;
-		}
-	}
 
 	public MessageQueue(App app, final Team myTeam) throws IOException {
 		this.app = app;
@@ -190,15 +126,15 @@ public class MessageQueue {
 					membershipList.enroll(peer);
 					records.next();
 					records.mark("enrolled");
-					alarm.setAlarm(SystemClock.elapsedRealtime());
+					alarm.setAlarm(AlarmManager.ELAPSED_REALTIME, -1);
 				}
 			}
 		};
 		memberWatcher.activate();
 
-		formWatcher = new QueueWatcher<Form>(store, Form.factory) {
+		formWatcher = new QueueWatcher<Form>(this, app, Form.factory) {
 			@Override
-			void generateMessage(PeerId peer, RecordIterator<Form> records) throws IOException {
+			boolean generateMessage(PeerId peer, RecordIterator<Form> records) throws IOException {
 				int pos = membershipList.getPosition(peer);
 				Form form = records.read();
 				Serialiser serialiser = new Serialiser();
@@ -207,12 +143,13 @@ public class MessageQueue {
 				Log.v(TAG, "Sending form from "+records.getOffset());
 				int delay = MessageQueue.this.app.getPrefs().getInt(App.FORM_DELAY, 60000);
 				fragmentMessage(form.time+delay, FORM, serialiser.getResult());
+				return true;
 			}
 		};
 
-		chatWatcher = new QueueWatcher<StoredChatMessage>(store, StoredChatMessage.factory) {
+		chatWatcher = new QueueWatcher<StoredChatMessage>(this, app, StoredChatMessage.factory) {
 			@Override
-			void generateMessage(PeerId peer, RecordIterator<StoredChatMessage> records) throws IOException {
+			boolean generateMessage(PeerId peer, RecordIterator<StoredChatMessage> records) throws IOException {
 				StoredChatMessage msg = records.read();
 
 				Serialiser serialiser = new Serialiser();
@@ -223,10 +160,13 @@ public class MessageQueue {
 				Log.v(TAG, "Sending chat message from "+records.getOffset());
 				int delay = MessageQueue.this.app.getPrefs().getInt(App.MESSAGE_DELAY, 60000);
 				fragmentMessage(msg.time.getTime()+delay, MESSAGE, serialiser.getResult());
+				return true;
 			}
 		};
 
-		alarm.setAlarm(SystemClock.elapsedRealtime());
+		locationWatcher = new LocationQueueWatcher();
+
+		alarm.setAlarm(AlarmManager.ELAPSED_REALTIME, -1);
 	}
 
 	private static MessageQueue instance=null;
@@ -254,7 +194,6 @@ public class MessageQueue {
 	private boolean endFragment() throws IOException {
 		if (fragmentBuff.position()<=4)
 			return false;
-		Log.v(TAG, "End fragment "+(nextFragmentSeq -1)+" "+fragmentBuff.position()+"?");
 		fragmentBuff.flip();
 		fragmentBuff.position(4);
 		byte[] fragmentBytes = new byte[fragmentBuff.remaining()];
@@ -267,7 +206,6 @@ public class MessageQueue {
 
 	private void beginFragment(int pieceLen) throws IOException {
 		int seq = nextFragmentSeq++;
-		Log.v(TAG, "Begin fragment "+seq);
 		fragmentBuff.clear();
 		fragmentBuff.position(4);
 		store.teamId.write(fragmentBuff);
@@ -283,9 +221,7 @@ public class MessageQueue {
 	public void fragmentMessage(long deadline, byte messageType, byte[] messageBytes, int length) throws IOException {
 		int offset = -3;
 
-		// translate the deadline from wall clock to elapsed time
-		long elapsedDeadline = SystemClock.elapsedRealtime() + (deadline - System.currentTimeMillis());
-		Log.v(TAG, "Fragmenting message, deadline in "+(elapsedDeadline - SystemClock.elapsedRealtime())+"ms");
+		Log.v(TAG, "Fragmenting "+messageType+" message, deadline in "+(deadline - System.currentTimeMillis())+"ms");
 
 		while (offset < length) {
 			int len = length - offset;
@@ -294,13 +230,12 @@ public class MessageQueue {
 				len = fragmentBuff.remaining();
 
 			if (fragmentBuff.position() <= 4) {
-				fragmentDeadline = elapsedDeadline;
+				fragmentDeadline = deadline;
 				beginFragment((offset == -3) ? 0 : len + 1);
 			}else if(deadline < fragmentDeadline){
-				fragmentDeadline = elapsedDeadline;
+				fragmentDeadline = deadline;
 			}
 
-			Log.v(TAG, "Adding "+messageType+" to seq "+(nextFragmentSeq-1)+" @"+fragmentBuff.position()+", offset "+offset+" len "+len+"/"+length);
 			if (offset == -3) {
 				fragmentBuff.put(messageType);
 				fragmentBuff.putShort((short) length);
@@ -381,6 +316,8 @@ public class MessageQueue {
 		team.reset("sent");
 		if (team.next())
 			return true;
+		if (locationWatcher.hasMessage())
+			return true;
 		if (chatWatcher.hasMessage())
 			return true;
 		if (formWatcher.hasMessage())
@@ -400,7 +337,8 @@ public class MessageQueue {
 				continue;
 			if (memberEnrollments())
 				continue;
-			// TODO locations HERE!?
+			if (locationWatcher.nextMessage())
+				continue;
 			if (chatWatcher.nextMessage())
 				continue;
 			if (formWatcher.nextMessage())
@@ -411,10 +349,11 @@ public class MessageQueue {
 				return false;
 			}
 
-			if (fragmentDeadline >= SystemClock.elapsedRealtime() && !flushNow){
+			long alarmTime = locationWatcher.adjustAlarm(fragmentDeadline);
+			if (alarmTime > System.currentTimeMillis() && !flushNow){
 				// Delay closing this fragment until the deadline of any message within it has elapsed
 				Log.v(TAG, "Delaying close of last fragment");
-				alarm.setAlarm(fragmentDeadline);
+				alarm.setAlarm(AlarmManager.RTC_WAKEUP, alarmTime);
 				return false;
 			}
 
@@ -550,8 +489,13 @@ public class MessageQueue {
 	private void sendNextFragment(){
 		try {
 			// Check if we have or can build a new fragment
-			if (!hasNext())
+			if (!hasNext()){
+				// set the alarm for the next outgoing location message
+				long nextAlarm = locationWatcher.adjustAlarm(Long.MAX_VALUE);
+				if (nextAlarm != Long.MAX_VALUE)
+					alarm.setAlarm(AlarmManager.RTC_WAKEUP, nextAlarm);
 				return;
+			}
 
 			// Check that we have at least one service that is ready to deliver a fragment
 			int status = IMessaging.UNAVAILABLE;
@@ -574,6 +518,11 @@ public class MessageQueue {
 						// since we have run out of fragments
 						for (int i = 0; i < services.length; i++)
 							services[i].done();
+
+						// set the alarm for the next outgoing location message
+						long nextAlarm = locationWatcher.adjustAlarm(Long.MAX_VALUE);
+						if (nextAlarm != Long.MAX_VALUE)
+							alarm.setAlarm(AlarmManager.RTC_WAKEUP, nextAlarm);
 						break;
 					}
 				}
@@ -606,6 +555,67 @@ public class MessageQueue {
 
 	// one of our services might be ready for a new fragment
 	public void onStateChanged(){
-		alarm.setAlarm(SystemClock.elapsedRealtime());
+		alarm.setAlarm(AlarmManager.ELAPSED_REALTIME_WAKEUP, -1);
+	}
+
+	private class LocationQueueWatcher extends QueueWatcher<Location> {
+		private Serialiser serialiser;
+
+		public LocationQueueWatcher() {
+			super(MessageQueue.this, app, LocationFactory.factory);
+		}
+
+		@Override
+		boolean findNext(PeerId peer, RecordIterator<Location> records) throws IOException {
+			if (records.getOffset() == records.store.EOF)
+				return false;
+			records.end();
+			if (!records.prev())
+				return false;
+			int delay = app.getPrefs().getInt(App.LOCATION_INTERVAL, 300000);
+			if (System.currentTimeMillis() - nextLocationMessage > delay) {
+				Log.v(TAG, "First location update, forcing message in 1s");
+				nextLocationMessage = System.currentTimeMillis() + 1000;
+			}
+			return true;
+		}
+
+		long adjustAlarm(long alarmTime){
+			if (super.hasMessage() && alarmTime > nextLocationMessage)
+				// fire this alarm earlier if we have a scheduled location message
+				return nextLocationMessage;
+			return alarmTime;
+		}
+
+		@Override
+		boolean hasMessage() {
+			return super.hasMessage() && System.currentTimeMillis() >= nextLocationMessage;
+		}
+
+		@Override
+		boolean generateMessage(PeerId peer, RecordIterator<Location> records) throws IOException {
+			Location l = records.read();
+			serialiser.putByte((byte)(int)membershipList.getPosition(peer));
+			serialiser.putTime(l.getTime(), myTeam.epoc);
+			serialiser.putFixedBytes(LocationFactory.packLatLngAcc(l));
+			return false;
+		}
+
+		@Override
+		boolean nextMessage() throws IOException {
+			if (!hasMessage())
+				return false;
+			serialiser = new Serialiser();
+			super.nextMessage();
+			long now = System.currentTimeMillis();
+			byte[] message = serialiser.getResult();
+			if (message.length>0) {
+				fragmentMessage(now, LOCATION, message);
+				int delay = app.getPrefs().getInt(App.LOCATION_INTERVAL, 300000);
+				nextLocationMessage = now + delay;
+			}
+			serialiser = null;
+			return message.length>0;
+		}
 	}
 }

@@ -4,7 +4,7 @@ import java.io.IOException;
 
 public class RecordIterator<T> {
 	private final Factory<T> factory;
-	final RecordStore store;
+	public final RecordStore store;
 	private long offset;
 	private int recordLength;
 
