@@ -81,7 +81,7 @@ public class Networks {
 
 	private Networks(App context, PeerId myId) throws IOException {
 		this.appContext = context;
-		this.nioLoop = new NioLoop();
+		this.nioLoop = new NioLoop(context);
 		this.myId = myId;
 
 		InetSocketAddress addr = new InetSocketAddress(PORT);
