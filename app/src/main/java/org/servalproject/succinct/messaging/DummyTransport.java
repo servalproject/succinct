@@ -69,6 +69,7 @@ public class DummyTransport implements IMessaging{
 		App.backgroundHandler.postDelayed(new Runnable() {
 			@Override
 			public void run() {
+				Log.v(TAG, "Fake send confirmation");
 				sending = null;
 				queue.onStateChanged();
 			}

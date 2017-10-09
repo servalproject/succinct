@@ -83,7 +83,10 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 		}
 
 		if (!messaging.canSendRawMessage()) {
-			Log.v(TAG, "Raw messaging is not available!");
+			Log.v(TAG, "Raw messaging is not available, forgetting configured device!");
+			SharedPreferences.Editor e = prefs.edit();
+			e.putString(App.PAIRED_ROCK, null);
+			e.apply();
 			return UNAVAILABLE;
 		}
 
@@ -134,7 +137,7 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 			}
 		} else if (messagingRequired) {
 			messageQueue.onStateChanged();
-		} else {
+		} else if (messaging.canSendRawMessage()){
 			// TODO settings dialog to ask the user explicitly to use this device
 			String deviceId = prefs.getString(App.PAIRED_ROCK, null);
 			if (deviceId == null) {

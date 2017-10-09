@@ -21,6 +21,7 @@ import org.servalproject.succinct.networking.messages.StoreState;
 import org.servalproject.succinct.storage.Serialiser;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.utils.ChangedObservable;
+import org.servalproject.succinct.utils.WakeAlarm;
 
 import java.io.File;
 import java.io.IOException;
@@ -50,8 +51,7 @@ public class Networks {
 
 	private final App appContext;
 	private final DatagramChannel dgram;
-	private final AlarmManager am;
-	private final PowerManager.WakeLock wakeLock;
+	private final WakeAlarm alarm;
 	public final PeerId myId;
 	private final NioLoop nioLoop;
 
@@ -126,27 +126,7 @@ public class Networks {
 		};
 		nioLoop.register(SelectionKey.OP_ACCEPT, acceptHandler);
 
-		am = (AlarmManager)context.getSystemService(Context.ALARM_SERVICE);
-		PowerManager pm = (PowerManager)context.getSystemService(Context.POWER_SERVICE);
-		wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG);
-
-		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
-			IntentFilter f = new IntentFilter();
-			f.addAction(ALARM_ACTION);
-			context.registerReceiver(new BroadcastReceiver() {
-				@Override
-				public void onReceive(Context context, Intent intent) {
-					wakeLock.acquire();
-					alarmIntent = null;
-					App.backgroundHandler.post(new Runnable() {
-						@Override
-						public void run() {
-							onAlarm();
-						}
-					});
-				}
-			}, f);
-		}
+		alarm = WakeAlarm.getAlarm(context, "Heartbeat", App.backgroundHandler, onAlarm);
 
 		new Thread(nioLoop, "Networking").start();
 
@@ -241,62 +221,11 @@ public class Networks {
 		}
 	}
 
-	private PendingIntent alarmIntent=null;
-	private AlarmManager.OnAlarmListener listener=null;
-	private long nextAlarm=-1;
 	public void setAlarm(int delay){
 		if (networks.isEmpty() || !backgroundEnabled)
 			return;
 
-		long newAlarm = SystemClock.elapsedRealtime()+delay;
-		// Don't delay an alarm that has already been set
-		if (nextAlarm!=-1 && newAlarm > nextAlarm)
-			return;
-
-		nextAlarm = newAlarm;
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-			if (listener == null){
-				listener = new AlarmManager.OnAlarmListener() {
-					@Override
-					public void onAlarm() {
-						wakeLock.acquire();
-						Networks.this.onAlarm();
-					}
-				};
-			}
-			am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP,
-					newAlarm,
-					"Heartbeat",
-					listener,
-					App.backgroundHandler);
-		}else{
-			alarmIntent = PendingIntent.getBroadcast(
-					appContext,
-					0,
-					new Intent(ALARM_ACTION),
-					PendingIntent.FLAG_UPDATE_CURRENT);
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-				am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP,
-						newAlarm,
-						alarmIntent);
-			}else{
-				am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
-						newAlarm,
-						alarmIntent);
-			}
-		}
-	}
-
-	private void cancelAlarm(){
-		nextAlarm = -1;
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-			if (listener!=null)
-				am.cancel(listener);
-		}else{
-			if (alarmIntent!=null)
-				am.cancel(alarmIntent);
-			alarmIntent = null;
-		}
+		alarm.setAlarm(SystemClock.elapsedRealtime()+delay);
 	}
 
 	// called from JNI
@@ -325,7 +254,7 @@ public class Networks {
 			Log.v(TAG, "Remove "+network);
 			networks.remove(network);
 			if (networks.isEmpty())
-				cancelAlarm();
+				alarm.cancel();
 			trimDead();
 		} catch (UnknownHostException e) {
 			Log.e(TAG, e.getMessage(), e);
@@ -374,79 +303,81 @@ public class Networks {
 		return unicastLink;
 	}
 
-	private void onAlarm() {
-		nextAlarm = -1;
-		if (backgroundEnabled && !networks.isEmpty()) {
-			trimDead();
+	private Runnable onAlarm = new Runnable() {
+		@Override
+		public void run() {
 
-			// assemble a broadcast heartbeat packet
-			ByteBuffer buff = ByteBuffer.allocate(MTU);
-			Serialiser serialiser = new Serialiser(buff);
-			Header hdr = new Header(myId, false);
-			hdr.write(buff);
+			if (backgroundEnabled && !networks.isEmpty()) {
+				trimDead();
 
-			// TODO in a crowded network, all link acks might not fit in a single packet
-			Ack ack = new Ack();
-			for(Peer p : peers.values()){
-				for(PeerLink l : p.networkLinks.values()){
-					if (l instanceof PeerSocketLink){
-						PeerSocketLink link = (PeerSocketLink)l;
-						ack.add(p, link);
+				// assemble a broadcast heartbeat packet
+				ByteBuffer buff = ByteBuffer.allocate(MTU);
+				Serialiser serialiser = new Serialiser(buff);
+				Header hdr = new Header(myId, false);
+				hdr.write(buff);
+
+				// TODO in a crowded network, all link acks might not fit in a single packet
+				Ack ack = new Ack();
+				for(Peer p : peers.values()){
+					for(PeerLink l : p.networkLinks.values()){
+						if (l instanceof PeerSocketLink){
+							PeerSocketLink link = (PeerSocketLink)l;
+							ack.add(p, link);
+						}
 					}
 				}
-			}
-			if (!ack.links.isEmpty())
-				Ack.factory.serialise(ack);
+				if (!ack.links.isEmpty())
+					Ack.factory.serialise(ack);
 
-			StoreState state = null;
-			if (appContext.teamStorage != null)
-				state = appContext.teamStorage.getState();
-			if (state != null)
-				state.write(buff);
-
-			buff.flip();
-			for (IPInterface i : networks) {
-				try {
-					dgram.send(buff, new InetSocketAddress(i.broadcastAddress, PORT));
-				} catch (SecurityException se) {
-					Log.e(TAG, se.getMessage(), se);
-				} catch (IOException e) {
-					Log.e(TAG, e.getMessage(), e);
-				}
-			}
-
-			hdr = new Header(myId, true);
-			// Send unicast heartbeats when we haven't heard recent confirmation of broadcast reception
-			for(Peer p:peers.values()){
-				PeerSocketLink link = sendUnicastAck(p);
-				if (link == null)
-					continue;
-
-				buff.clear();
-				hdr.write(buff);
-				ack = new Ack();
-				ack.add(p, link);
-				Ack.factory.serialise(ack);
+				StoreState state = null;
+				if (appContext.teamStorage != null)
+					state = appContext.teamStorage.getState();
 				if (state != null)
 					state.write(buff);
 
 				buff.flip();
-
-				try {
-					dgram.send(buff, link.addr);
-				} catch (SecurityException se) {
-					Log.e(TAG, se.getMessage(), se);
-				} catch (IOException e) {
-					Log.e(TAG, e.getMessage(), e);
+				for (IPInterface i : networks) {
+					try {
+						dgram.send(buff, new InetSocketAddress(i.broadcastAddress, PORT));
+					} catch (SecurityException se) {
+						Log.e(TAG, se.getMessage(), se);
+					} catch (IOException e) {
+						Log.e(TAG, e.getMessage(), e);
+					}
 				}
+
+				hdr = new Header(myId, true);
+				// Send unicast heartbeats when we haven't heard recent confirmation of broadcast reception
+				for(Peer p:peers.values()){
+					PeerSocketLink link = sendUnicastAck(p);
+					if (link == null)
+						continue;
+
+					buff.clear();
+					hdr.write(buff);
+					ack = new Ack();
+					ack.add(p, link);
+					Ack.factory.serialise(ack);
+					if (state != null)
+						state.write(buff);
+
+					buff.flip();
+
+					try {
+						dgram.send(buff, link.addr);
+					} catch (SecurityException se) {
+						Log.e(TAG, se.getMessage(), se);
+					} catch (IOException e) {
+						Log.e(TAG, e.getMessage(), e);
+					}
+				}
+
+				// TODO, send any required unicast packets to bypass packet filters
+
+				setAlarm(HEARTBEAT_MS);
 			}
-
-			// TODO, send any required unicast packets to bypass packet filters
-
-			setAlarm(HEARTBEAT_MS);
 		}
-		wakeLock.release();
-	}
+	};
 
 	public PeerConnection connectLink(Peer peer, PeerSocketLink link) throws IOException {
 		SocketChannel channel = SocketChannel.open();

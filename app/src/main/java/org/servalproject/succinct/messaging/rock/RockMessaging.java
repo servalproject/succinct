@@ -161,7 +161,8 @@ public class RockMessaging {
 	}
 
 	public boolean canDisconnect(){
-		return isConnected() || connectionState == R7ConnectionState.R7ConnectionStateConnecting;
+		return connectionState == R7ConnectionState.R7ConnectionStateConnecting||
+				connectionState == R7ConnectionState.R7ConnectionStateConnected;
 	}
 
 	public boolean isScanning(){
@@ -246,8 +247,11 @@ public class RockMessaging {
 	}
 
 	public void disconnect(){
-		setLastAction("Disconnecting");
-		comms.disconnect();
+		if (connectionState == R7ConnectionState.R7ConnectionStateConnecting||
+				connectionState == R7ConnectionState.R7ConnectionStateConnected) {
+			setLastAction("Disconnecting");
+			comms.disconnect();
+		}
 	}
 
 	// Do we have a device connection?

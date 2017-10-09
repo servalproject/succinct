@@ -53,6 +53,13 @@ public class App extends Application {
 	public static final String SMS_DESTINATION = "sms_destination";
 	public static final String BASE_SERVER_URL = "base_server_url";
 
+	// Maximum delay (in ms) before flushing message fragments;
+	// to send a form
+	public static final String FORM_DELAY = "form_delay";
+	// to send a text message
+	public static final String MESSAGE_DELAY = "message_delay";
+	// minimum delay before sending a location update
+
 	private PeerId fromPreference(SharedPreferences prefs, String pref){
 		String id = prefs.getString(pref, null);
 		if (id==null || id.length() != PeerId.LEN*2)

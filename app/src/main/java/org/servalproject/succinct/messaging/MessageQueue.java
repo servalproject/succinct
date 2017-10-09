@@ -4,6 +4,7 @@ package org.servalproject.succinct.messaging;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.os.SystemClock;
 import android.util.Log;
 
 import org.servalproject.succinct.App;
@@ -19,6 +20,7 @@ import org.servalproject.succinct.team.Membership;
 import org.servalproject.succinct.team.MembershipList;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.team.TeamMember;
+import org.servalproject.succinct.utils.WakeAlarm;
 
 import java.io.File;
 import java.io.IOException;
@@ -49,12 +51,14 @@ public class MessageQueue {
 	private final ConnectivityManager connectivityManager;
 	private int nextFragmentSeq;
 	private static final String TAG = "MessageQueue";
+	private final WakeAlarm alarm;
 
 	private final StorageWatcher<TeamMember> memberWatcher;
 	private final QueueWatcher<Form> formWatcher;
 	private final QueueWatcher<StoredChatMessage> chatWatcher;
 
 	private final ByteBuffer fragmentBuff;
+	private long fragmentDeadline;
 
 	abstract class QueueWatcher<T> extends StorageWatcher<T>{
 		private final HashMap<PeerId, RecordIterator<T>> queue = new HashMap<>();
@@ -77,8 +81,7 @@ public class MessageQueue {
 					return;
 				Log.v(TAG, "Remembering "+peer+"/"+records.getFactory().getFileName());
 				queue.put(peer, records);
-				App.backgroundHandler.removeCallbacks(sendRunner);
-				App.backgroundHandler.postDelayed(sendRunner, 500);
+				alarm.setAlarm(SystemClock.elapsedRealtime());
 			}
 		}
 
@@ -138,6 +141,8 @@ public class MessageQueue {
 		if (last != null)
 			nextFragmentSeq = last.seq+1;
 
+		alarm = WakeAlarm.getAlarm(app, "Queue", App.backgroundHandler, sendRunner);
+
 		services = new IMessaging[]{
 				new SMSTransport(this, app),
 				new RockTransport(this, app)
@@ -168,8 +173,11 @@ public class MessageQueue {
 			// recover pre-quit fragment?
 			int size = fragmentBuff.getInt();
 			fragmentBuff.position(size+fragmentBuff.position());
-			if (size>0)
-				nextFragmentSeq = fragmentBuff.getInt(4 + PeerId.LEN)+1;
+			if (size>0) {
+				nextFragmentSeq = fragmentBuff.getInt(4 + PeerId.LEN) + 1;
+				// since we're restarting, assume we should send any partial fragment now?
+				fragmentDeadline = SystemClock.elapsedRealtime();
+			}
 			Log.v(TAG, "Reset fragment buffer to "+size);
 		}
 
@@ -182,8 +190,7 @@ public class MessageQueue {
 					membershipList.enroll(peer);
 					records.next();
 					records.mark("enrolled");
-					App.backgroundHandler.removeCallbacks(sendRunner);
-					App.backgroundHandler.postDelayed(sendRunner, 500);
+					alarm.setAlarm(SystemClock.elapsedRealtime());
 				}
 			}
 		};
@@ -198,7 +205,8 @@ public class MessageQueue {
 				serialiser.putByte((byte) pos);
 				serialiser.putTime(form.time, myTeam.epoc);
 				Log.v(TAG, "Sending form from "+records.getOffset());
-				fragmentMessage(FORM, serialiser.getResult());
+				int delay = MessageQueue.this.app.getPrefs().getInt(App.FORM_DELAY, 60000);
+				fragmentMessage(form.time+delay, FORM, serialiser.getResult());
 			}
 		};
 
@@ -212,13 +220,13 @@ public class MessageQueue {
 				serialiser.putTime(msg.time.getTime(), myTeam.epoc);
 				serialiser.putString(msg.message);
 
-				Log.v(TAG, "Sending chat message  from "+records.getOffset());
-				fragmentMessage(MESSAGE, serialiser.getResult());
+				Log.v(TAG, "Sending chat message from "+records.getOffset());
+				int delay = MessageQueue.this.app.getPrefs().getInt(App.MESSAGE_DELAY, 60000);
+				fragmentMessage(msg.time.getTime()+delay, MESSAGE, serialiser.getResult());
 			}
 		};
 
-		App.backgroundHandler.removeCallbacks(sendRunner);
-		App.backgroundHandler.postDelayed(sendRunner, 500);
+		alarm.setAlarm(SystemClock.elapsedRealtime());
 	}
 
 	private static MessageQueue instance=null;
@@ -242,10 +250,6 @@ public class MessageQueue {
 	private static final byte LOCATION=4;
 	private static final byte MESSAGE=5;
 	private static final byte FORM=6;
-
-	public void fragmentMessage(byte messageType, byte[] messageBytes) throws IOException {
-		fragmentMessage(messageType, messageBytes, messageBytes.length);
-	}
 
 	private boolean endFragment() throws IOException {
 		if (fragmentBuff.position()<=4)
@@ -272,16 +276,29 @@ public class MessageQueue {
 		fragmentBuff.putInt(0, fragmentBuff.position());
 	}
 
-	public void fragmentMessage(byte messageType, byte[] messageBytes, int length) throws IOException {
+	public void fragmentMessage(long deadline, byte messageType, byte[] messageBytes) throws IOException {
+		fragmentMessage(deadline, messageType, messageBytes, messageBytes.length);
+	}
+
+	public void fragmentMessage(long deadline, byte messageType, byte[] messageBytes, int length) throws IOException {
 		int offset = -3;
+
+		// translate the deadline from wall clock to elapsed time
+		long elapsedDeadline = SystemClock.elapsedRealtime() + (deadline - System.currentTimeMillis());
+		Log.v(TAG, "Fragmenting message, deadline in "+(elapsedDeadline - SystemClock.elapsedRealtime())+"ms");
+
 		while (offset < length) {
 			int len = length - offset;
 
 			if (len > fragmentBuff.remaining())
 				len = fragmentBuff.remaining();
 
-			if (fragmentBuff.position() <= 4)
+			if (fragmentBuff.position() <= 4) {
+				fragmentDeadline = elapsedDeadline;
 				beginFragment((offset == -3) ? 0 : len + 1);
+			}else if(deadline < fragmentDeadline){
+				fragmentDeadline = elapsedDeadline;
+			}
 
 			Log.v(TAG, "Adding "+messageType+" to seq "+(nextFragmentSeq-1)+" @"+fragmentBuff.position()+", offset "+offset+" len "+len+"/"+length);
 			if (offset == -3) {
@@ -305,13 +322,14 @@ public class MessageQueue {
 		while (team.next()){
 			Serialiser serialiser = new Serialiser();
 			Team record = team.read();
+			int delay = app.getPrefs().getInt(App.MESSAGE_DELAY, 60000);
 			if (record.id == null) {
 				serialiser.putRawLong(record.epoc);
-				fragmentMessage(DESTROY_TEAM, serialiser.getResult());
+				fragmentMessage(record.epoc+delay, DESTROY_TEAM, serialiser.getResult());
 			}else{
 				serialiser.putRawLong(record.epoc);
 				serialiser.putString(record.name);
-				fragmentMessage(CREATE_TEAM, serialiser.getResult());
+				fragmentMessage(record.epoc+delay, CREATE_TEAM, serialiser.getResult());
 			}
 			Team.factory.serialise(serialiser, record);
 			ret = true;
@@ -340,9 +358,10 @@ public class MessageQueue {
 			if (m.enroll) {
 				serialiser.putString(member.employeeId);
 				serialiser.putString(member.name);
-				fragmentMessage(ENROLL, serialiser.getResult());
+
+				fragmentMessage(m.time, ENROLL, serialiser.getResult());
 			}else{
-				fragmentMessage(LEAVE, serialiser.getResult());
+				fragmentMessage(m.time, LEAVE, serialiser.getResult());
 			}
 			sent = true;
 		}
@@ -351,6 +370,8 @@ public class MessageQueue {
 	}
 
 	private boolean hasNext() throws IOException {
+		if (fragmentBuff.position()>4)
+			return true;
 		fragments.reset("sending");
 		if (fragments.next())
 			return true;
@@ -367,7 +388,7 @@ public class MessageQueue {
 		return false;
 	}
 
-	private boolean nextMessage() throws IOException {
+	private boolean nextMessage(boolean flushNow) throws IOException {
 		// Look for something to send in priority order;
 		int seq = nextFragmentSeq;
 		if (fragmentBuff.position()<=4)
@@ -384,8 +405,20 @@ public class MessageQueue {
 				continue;
 			if (formWatcher.nextMessage())
 				continue;
-			// TODO delay closing the last fragment on a timer?
-			Log.v(TAG, "Message queue ran out");
+
+			if (fragmentBuff.position()<=4) {
+				Log.v(TAG, "Message queue is empty");
+				return false;
+			}
+
+			if (fragmentDeadline >= SystemClock.elapsedRealtime() && !flushNow){
+				// Delay closing this fragment until the deadline of any message within it has elapsed
+				Log.v(TAG, "Delaying close of last fragment");
+				alarm.setAlarm(fragmentDeadline);
+				return false;
+			}
+
+			Log.v(TAG, "Deadline expired, closing last fragment");
 			return endFragment();
 		}
 		return true;
@@ -486,7 +519,7 @@ public class MessageQueue {
 				if (sendFragment == null){
 					// If we reach the end of the fragment list, we can avoid other transports
 					fragments.mark("sending");
-					if (!(nextMessage() && fragments.next())) {
+					if (!(nextMessage(true) && fragments.next())) {
 						return;
 					}
 					continue;
@@ -515,7 +548,6 @@ public class MessageQueue {
 	}
 
 	private void sendNextFragment(){
-		Log.v(TAG, "sendNextFragment");
 		try {
 			// Check if we have or can build a new fragment
 			if (!hasNext())
@@ -526,8 +558,10 @@ public class MessageQueue {
 			for (int i = 0; i < services.length && status == IMessaging.UNAVAILABLE; i++){
 				status = services[i].checkAvailable();
 			}
-			if (status != IMessaging.SUCCESS)
+			if (status != IMessaging.SUCCESS) {
+				Log.v(TAG, "All services are busy or unavailable");
 				return;
+			}
 
 			// Now we can actually fragment the next message
 			// and try to send fragments
@@ -535,7 +569,7 @@ public class MessageQueue {
 			fragments.reset("sending");
 			while (true) {
 				if (!fragments.next()){
-					if (!(nextMessage() && fragments.next())) {
+					if (!(nextMessage(false) && fragments.next())) {
 						// tell each service they can teardown their connection now.
 						// since we have run out of fragments
 						for (int i = 0; i < services.length; i++)
@@ -572,7 +606,6 @@ public class MessageQueue {
 
 	// one of our services might be ready for a new fragment
 	public void onStateChanged(){
-		App.backgroundHandler.removeCallbacks(sendRunner);
-		App.backgroundHandler.post(sendRunner);
+		alarm.setAlarm(SystemClock.elapsedRealtime());
 	}
 }
