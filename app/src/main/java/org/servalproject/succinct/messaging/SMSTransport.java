@@ -17,6 +17,8 @@ import android.util.Log;
 import org.servalproject.succinct.App;
 import org.servalproject.succinct.networking.Hex;
 
+import java.util.ArrayList;
+
 
 public class SMSTransport implements IMessaging{
 	private final App appContext;
@@ -28,6 +30,10 @@ public class SMSTransport implements IMessaging{
 	private static final String TAG = "DummyTransport";
 	private static final String ACTION_SENT = "org.servalproject.succinct.SMS_SENT";
 
+	private static final String EXTRA_SEQ = "seq";
+	private static final String EXTRA_PART = "part";
+	private static final String EXTRA_PARTS = "parts";
+
 	private final BroadcastReceiver receiver = new BroadcastReceiver() {
 		@Override
 		public void onReceive(Context context, Intent intent) {
@@ -37,8 +43,12 @@ public class SMSTransport implements IMessaging{
 				Log.v(TAG, "airplaneMode = " + airplaneMode);
 				queue.onStateChanged();
 			}else if (action.equals(ACTION_SENT)){
-				if (sending != null && getResultCode() == Activity.RESULT_OK){
-					// TODO API to indicate success?
+				int seq = intent.getIntExtra(EXTRA_SEQ, -1);
+				int part = intent.getIntExtra(EXTRA_PART, -1);
+				int parts = intent.getIntExtra(EXTRA_PARTS, -1);
+				// TODO track each part separately?
+				if (sending != null && seq == sending.seq && part == parts && getResultCode() == Activity.RESULT_OK){
+					// TODO API to indicate success / failure?
 					Log.v(TAG, "Fragment sent");
 					sending = null;
 					queue.onStateChanged();
@@ -47,8 +57,10 @@ public class SMSTransport implements IMessaging{
 		}
 	};
 
+	private static final int MAX_PARTS = 2;
 	public int getMTU(){
-		int len = SmsMessage.MAX_USER_DATA_SEPTETS;
+		int len = (MAX_PARTS == 1) ? SmsMessage.MAX_USER_DATA_SEPTETS :
+				SmsMessage.MAX_USER_DATA_SEPTETS_WITH_HEADER * MAX_PARTS;
 		if ((len% 4)!=0)
 			len -= len % 4;
 		return (len/4)*3;
@@ -103,14 +115,24 @@ public class SMSTransport implements IMessaging{
 		sending = fragment;
 		Log.v(TAG, "Sending "+ Hex.toString(fragment.bytes));
 
-		// Do we need a broadcast receiver defined in our manifest?
-		Intent sentIntent = new Intent(ACTION_SENT);
-		sentIntent.putExtra("seq", fragment.seq);
+		String encoded = Base64.encodeToString(fragment.bytes, Base64.NO_WRAP);
 
-		PendingIntent pi = PendingIntent.getBroadcast(appContext, 0, sentIntent, 0);
+		// this should handle a single part just fine.
+		ArrayList<String> parts = smsManager.divideMessage(encoded);
+		ArrayList<PendingIntent> send = new ArrayList<>();
 
-		String encoded = Base64.encodeToString(fragment.bytes, Base64.NO_WRAP | Base64.URL_SAFE);
-		smsManager.sendTextMessage(destinationNumber, null, encoded, pi, null);
+		for(int i=0;i<parts.size();i++){
+
+			// Do we need a broadcast receiver defined in our manifest?
+			Intent sentIntent = new Intent(ACTION_SENT);
+			sentIntent.putExtra(EXTRA_SEQ, fragment.seq);
+			sentIntent.putExtra(EXTRA_PART, i);
+			sentIntent.putExtra(EXTRA_PARTS, parts.size());
+
+			send.add(PendingIntent.getBroadcast(appContext, 0, sentIntent, 0));
+		}
+
+		smsManager.sendMultipartTextMessage(destinationNumber, null, parts, send, null);
 
 		return SUCCESS;
 	}
