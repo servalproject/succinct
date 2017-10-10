@@ -39,6 +39,8 @@ android {
             }
         }
         buildConfigField "String", "rockAppId", "\"$rockAppId\""
+        buildConfigField "String", "directApiKey", "\"$directApiKey\""
+        buildConfigField "String", "directApiUrl", "\"$directApiUrl\""
     }
     buildTypes {
         release {

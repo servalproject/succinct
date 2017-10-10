@@ -153,9 +153,9 @@ public class RecordStore {
 	int readLength(long offset) throws IOException {
 		byte[] lenBytes = new byte[4];
 		readBytes(offset, lenBytes);
-		return (lenBytes[0]&0xFF)>>24
-				|(lenBytes[1]&0xFF)>>16
-				|(lenBytes[2]&0xFF)>>8
+		return (lenBytes[0]&0xFF)<<24
+				|(lenBytes[1]&0xFF)<<16
+				|(lenBytes[2]&0xFF)<<8
 				|(lenBytes[3]&0xFF);
 	}
 
@@ -188,9 +188,9 @@ public class RecordStore {
 	public void appendRecord(byte[] record) throws IOException {
 		int len = record.length+8;
 		byte[] completeRecord = new byte[len];
-		completeRecord[0]= completeRecord[len -4] = (byte) (len<<24);
-		completeRecord[1]= completeRecord[len -3] = (byte) (len<<16);
-		completeRecord[2]= completeRecord[len -2] = (byte) (len<<8);
+		completeRecord[0]= completeRecord[len -4] = (byte) (len>>24);
+		completeRecord[1]= completeRecord[len -3] = (byte) (len>>16);
+		completeRecord[2]= completeRecord[len -2] = (byte) (len>>8);
 		completeRecord[3]= completeRecord[len -1] = (byte) (len);
 		System.arraycopy(record, 0, completeRecord, 4, record.length);
 		synchronized (this) {

@@ -1,6 +1,7 @@
 package org.servalproject.succinct.storage;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 public class DeSerialiser {
 	private final ByteBuffer buff;
@@ -9,6 +10,7 @@ public class DeSerialiser {
 	}
 	public DeSerialiser(ByteBuffer buff){
 		this.buff = buff;
+		buff.order(ByteOrder.BIG_ENDIAN);
 	}
 
 	public int remaining(){

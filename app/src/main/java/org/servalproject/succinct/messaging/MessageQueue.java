@@ -10,9 +10,11 @@ import android.os.SystemClock;
 import android.util.Log;
 
 import org.servalproject.succinct.App;
+import org.servalproject.succinct.BuildConfig;
 import org.servalproject.succinct.chat.StoredChatMessage;
 import org.servalproject.succinct.forms.Form;
 import org.servalproject.succinct.location.LocationFactory;
+import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.networking.PeerId;
 import org.servalproject.succinct.storage.RecordIterator;
 import org.servalproject.succinct.storage.Serialiser;
@@ -34,6 +36,7 @@ import java.io.Reader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 
 // Manage the queue of outgoing messages / fragments
@@ -46,6 +49,7 @@ public class MessageQueue {
 	private final RecordIterator<Team> team;
 	public final IMessaging[] services;
 	private final int MTU;
+	private static final int HEADER = 13;
 	private final MembershipList membershipList;
 	private final ConnectivityManager connectivityManager;
 	private int nextFragmentSeq;
@@ -102,6 +106,7 @@ public class MessageQueue {
 
 		f.setLength(MTU+4);
 		fragmentBuff = f.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, MTU+4);
+		fragmentBuff.order(ByteOrder.BIG_ENDIAN);
 
 		if (empty) {
 			fragmentBuff.putInt(0, 0);
@@ -221,20 +226,23 @@ public class MessageQueue {
 	public void fragmentMessage(long deadline, byte messageType, byte[] messageBytes, int length) throws IOException {
 		int offset = -3;
 
-		Log.v(TAG, "Fragmenting "+messageType+" message, deadline in "+(deadline - System.currentTimeMillis())+"ms");
+		Log.v(TAG, "Fragmenting "+messageType+" message, deadline in "+(deadline - System.currentTimeMillis())+"ms "+Hex.toString(messageBytes, 0, length));
 
 		while (offset < length) {
 			int len = length - offset;
+			if (len > MTU - HEADER)
+				len = MTU - HEADER;
 
-			if (len > fragmentBuff.remaining())
-				len = fragmentBuff.remaining();
 
 			if (fragmentBuff.position() <= 4) {
 				fragmentDeadline = deadline;
-				beginFragment((offset == -3) ? 0 : len + 1);
+				beginFragment((offset == -3) ? 0 : len);
 			}else if(deadline < fragmentDeadline){
 				fragmentDeadline = deadline;
 			}
+
+			if (len > fragmentBuff.remaining())
+				len = fragmentBuff.remaining();
 
 			if (offset == -3) {
 				fragmentBuff.put(messageType);
@@ -425,8 +433,9 @@ public class MessageQueue {
 	}
 
 	private void sendViaHttp(){
-		String baseUrl = app.getPrefs().getString(App.BASE_SERVER_URL, null);
-		if (baseUrl == null)
+		String baseUrl = app.getPrefs().getString(App.BASE_SERVER_URL,
+				BuildConfig.directApiUrl);
+		if (baseUrl == null || "".equals(baseUrl))
 			return;
 
 		NetworkInfo network = connectivityManager.getActiveNetworkInfo();
@@ -438,7 +447,7 @@ public class MessageQueue {
 			// If we've already acked them all, skip the connection to the server
 			if (fragments.next()){
 				// double check the latest ack sequence with the server
-				URL url = new URL(baseUrl+"/succinct/api/v1/ack/"+store.teamId);
+				URL url = new URL(baseUrl+"/succinct/api/v1/ack/"+store.teamId+"?key="+BuildConfig.directApiKey);
 				HttpURLConnection connection = (HttpURLConnection)url.openConnection();
 				connection.setRequestProperty("Connection", "keep-alive");
 				connection.connect();
@@ -464,10 +473,11 @@ public class MessageQueue {
 					continue;
 				}
 
-				URL url = new URL(baseUrl+"/succinct/api/v1/uploadFragment/"+store.teamId);
+				URL url = new URL(baseUrl+"/succinct/api/v1/uploadFragment/"+store.teamId+"?key="+BuildConfig.directApiKey);
 				HttpURLConnection connection = (HttpURLConnection)url.openConnection();
 				connection.setRequestMethod("POST");
 				connection.setRequestProperty("Connection", "keep-alive");
+				connection.setRequestProperty("Content-Type", "application/octet-stream");
 				connection.setFixedLengthStreamingMode(sendFragment.bytes.length);
 				connection.connect();
 				OutputStream out = connection.getOutputStream();
