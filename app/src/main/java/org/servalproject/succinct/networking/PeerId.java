@@ -13,11 +13,8 @@ public class PeerId {
 	public final byte[] id;
 
 	public PeerId(String value){
-		id = Hex.fromString(value);
-		if (id.length!=LEN)
-			throw new IllegalStateException("Unexpected length!");
+		this(Hex.fromString(value));
 	}
-
 	PeerId(byte[] bytes){
 		this.id = bytes;
 		if (id.length!=LEN)

@@ -47,11 +47,11 @@ public class RequestTeam extends Message<RequestTeam> {
 	@Override
 	public void process(Peer peer) {
 		App app = peer.appContext;
-		if (app.teamStorage == null || !app.teamStorage.teamId.equals(teamId))
+		if (app.teamStorage == null)
 			return;
 		try {
-			Team myTeam = app.teamStorage.getLastRecord(Team.factory, app.teamStorage.teamId);
-			if (myTeam!=null)
+			Team myTeam = app.teamStorage.getTeam();
+			if (myTeam!=null && myTeam.id.equals(teamId))
 				peer.getConnection().queue(myTeam);
 		} catch (IOException e) {
 			Log.e(TAG, e.getMessage(), e);

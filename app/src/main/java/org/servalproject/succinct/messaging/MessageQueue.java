@@ -20,6 +20,7 @@ import org.servalproject.succinct.storage.RecordIterator;
 import org.servalproject.succinct.storage.Serialiser;
 import org.servalproject.succinct.storage.Storage;
 import org.servalproject.succinct.storage.StorageWatcher;
+import org.servalproject.succinct.storage.TeamStorage;
 import org.servalproject.succinct.team.Membership;
 import org.servalproject.succinct.team.MembershipList;
 import org.servalproject.succinct.team.Team;
@@ -35,22 +36,20 @@ import java.io.RandomAccessFile;
 import java.io.Reader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 
 // Manage the queue of outgoing messages / fragments
 public class MessageQueue {
 	private final App app;
-	private final Team myTeam;
-	private final Storage store;
+	private final TeamStorage store;
 	private final RecordIterator<Fragment> fragments;
 	private final RecordIterator<Membership> members;
 	private final RecordIterator<Team> team;
 	public final IMessaging[] services;
 	private final int MTU;
 	private static final int HEADER = 13;
-	private final MembershipList membershipList;
 	private final ConnectivityManager connectivityManager;
 	private int nextFragmentSeq;
 	private static final String TAG = "MessageQueue";
@@ -63,15 +62,13 @@ public class MessageQueue {
 	private final LocationQueueWatcher locationWatcher;
 	private long nextLocationMessage=-1;
 
-	private final ByteBuffer fragmentBuff;
+	private final MappedByteBuffer fragmentBuff;
 	private long fragmentDeadline;
 
-	public MessageQueue(App app, final Team myTeam) throws IOException {
-		this.app = app;
-		connectivityManager = (ConnectivityManager)app.getSystemService(Context.CONNECTIVITY_SERVICE);
-		store = app.teamStorage;
-		this.myTeam = myTeam;
-		membershipList = app.membershipList;
+	public MessageQueue(App appContext, TeamStorage store) throws IOException {
+		this.app = appContext;
+		this.store = store;
+		connectivityManager = (ConnectivityManager)appContext.getSystemService(Context.CONNECTIVITY_SERVICE);
 		members = store.openIterator(Membership.factory, store.teamId);
 		team = store.openIterator(Team.factory, store.teamId);
 		team.reset("sent");
@@ -106,6 +103,7 @@ public class MessageQueue {
 
 		f.setLength(MTU+4);
 		fragmentBuff = f.getChannel().map(FileChannel.MapMode.READ_WRITE, 0, MTU+4);
+		f.close();
 		fragmentBuff.order(ByteOrder.BIG_ENDIAN);
 
 		if (empty) {
@@ -132,10 +130,10 @@ public class MessageQueue {
 						TeamMember member = records.read();
 						if (member.name == null){
 							Log.v(TAG, "Removing "+peer+" from the team list");
-							membershipList.revoke(peer);
+							store.getMembers().revoke(peer);
 						}else{
 							Log.v(TAG, "Enrolling "+peer+" in the team list");
-							membershipList.enroll(peer);
+							store.getMembers().enroll(peer);
 						}
 						records.next();
 						records.mark("enrolled");
@@ -149,11 +147,11 @@ public class MessageQueue {
 		formWatcher = new QueueWatcher<Form>(this, app, Form.factory) {
 			@Override
 			boolean generateMessage(PeerId peer, RecordIterator<Form> records) throws IOException {
-				int pos = membershipList.getPosition(peer);
+				int pos = store.getMembers().getPosition(peer);
 				Form form = records.read();
 				Serialiser serialiser = new Serialiser();
 				serialiser.putByte((byte) pos);
-				serialiser.putTime(form.time, myTeam.epoc);
+				serialiser.putTime(form.time, store.getTeam().epoc);
 				Log.v(TAG, "Sending form from "+records.getOffset());
 				int delay = MessageQueue.this.app.getPrefs().getInt(App.FORM_DELAY, 60000);
 				fragmentMessage(form.time+delay, FORM, serialiser.getResult());
@@ -167,8 +165,8 @@ public class MessageQueue {
 				StoredChatMessage msg = records.read();
 
 				Serialiser serialiser = new Serialiser();
-				serialiser.putByte((byte)(int)membershipList.getPosition(peer));
-				serialiser.putTime(msg.time.getTime(), myTeam.epoc);
+				serialiser.putByte((byte)(int)store.getMembers().getPosition(peer));
+				serialiser.putTime(msg.time.getTime(), store.getTeam().epoc);
 				serialiser.putString(msg.message);
 
 				Log.v(TAG, "Sending chat message from "+records.getOffset());
@@ -183,27 +181,13 @@ public class MessageQueue {
 		alarm.setAlarm(AlarmManager.ELAPSED_REALTIME, WakeAlarm.NOW);
 	}
 
-	private static MessageQueue instance=null;
-	// start fragmenting and queuing messages, if this is the app instance with that role
-	public static void init(App app){
-		try {
-			if (instance!=null)
-				throw new IllegalStateException();
-			Team myTeam = app.teamStorage.getLastRecord(Team.factory, app.teamStorage.teamId);
-			if (myTeam!=null && myTeam.leader.equals(app.networks.myId))
-				instance = new MessageQueue(app, myTeam);
-		} catch (IOException e) {
-			throw new IllegalStateException(e);
-		}
-	}
-
 	private static final byte CREATE_TEAM = 0;
 	private static final byte DESTROY_TEAM = 1;
-	private static final byte ENROLL=2;
-	private static final byte LEAVE=3;
-	private static final byte LOCATION=4;
-	private static final byte MESSAGE=5;
-	private static final byte FORM=6;
+	private static final byte ENROLL = 2;
+	private static final byte LEAVE = 3;
+	private static final byte LOCATION = 4;
+	private static final byte MESSAGE = 5;
+	private static final byte FORM = 6;
 
 	private boolean endFragment() throws IOException {
 		if (fragmentBuff.position()<=4)
@@ -226,6 +210,14 @@ public class MessageQueue {
 		fragmentBuff.putInt(seq);
 		fragmentBuff.put((byte) (pieceLen > 255 ? 255 : pieceLen));
 		fragmentBuff.putInt(0, fragmentBuff.position());
+	}
+
+	public void shutdown(){
+		// stop listening for storage changes
+		memberWatcher.deactivate();
+		formWatcher.deactivate();
+		chatWatcher.deactivate();
+		locationWatcher.deactivate();
 	}
 
 	public void fragmentMessage(long deadline, byte messageType, byte[] messageBytes) throws IOException {
@@ -297,16 +289,16 @@ public class MessageQueue {
 
 		while(members.next()){
 			Membership m = members.read();
-			int pos = membershipList.getPosition(m.peerId);
+			int pos = store.getMembers().getPosition(m.peerId);
 			if (pos > 255)
 				continue;
 
-			TeamMember member = membershipList.getTeamMember(m.peerId);
+			TeamMember member = store.getMembers().getTeamMember(m.peerId);
 			if (member == null)
 				break;
 
 			serialiser.putByte((byte) pos);
-			serialiser.putTime(m.time, myTeam.epoc);
+			serialiser.putTime(m.time, store.getTeam().epoc);
 			if (m.enroll) {
 				serialiser.putString(member.employeeId);
 				serialiser.putString(member.name);
@@ -369,6 +361,7 @@ public class MessageQueue {
 			long alarmTime = locationWatcher.adjustAlarm(fragmentDeadline);
 			if (alarmTime > System.currentTimeMillis() && !flushNow){
 				// Delay closing this fragment until the deadline of any message within it has elapsed
+				fragmentBuff.force();
 				Log.v(TAG, "Delaying close of last fragment");
 				alarm.setAlarm(AlarmManager.RTC_WAKEUP, alarmTime);
 				return false;
@@ -614,8 +607,8 @@ public class MessageQueue {
 		@Override
 		boolean generateMessage(PeerId peer, RecordIterator<Location> records) throws IOException {
 			Location l = records.read();
-			serialiser.putByte((byte)(int)membershipList.getPosition(peer));
-			serialiser.putTime(l.getTime(), myTeam.epoc);
+			serialiser.putByte((byte)(int)store.getMembers().getPosition(peer));
+			serialiser.putTime(l.getTime(), store.getTeam().epoc);
 			serialiser.putFixedBytes(LocationFactory.packLatLngAcc(l));
 			return false;
 		}

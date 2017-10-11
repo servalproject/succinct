@@ -4,6 +4,9 @@ import org.servalproject.succinct.App;
 import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.networking.PeerId;
 import org.servalproject.succinct.networking.messages.StoreState;
+import org.servalproject.succinct.team.MembershipList;
+import org.servalproject.succinct.team.Team;
+import org.servalproject.succinct.team.TeamMember;
 import org.servalproject.succinct.utils.ChangedObservable;
 
 import java.io.File;
@@ -11,12 +14,13 @@ import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Observable;
 
 public class Storage {
-	private final App appContext;
+	protected final App appContext;
 	public final PeerId teamId;
 	private StoreState state;
 	public final File root;
@@ -47,35 +51,14 @@ public class Storage {
 			appContext.networks.setAlarm(10);
 	}
 
-	private Map<String, WeakReference<RecordStore>> files = new HashMap<>();
+	private Map<String, RecordStore> files = new HashMap<>();
 	public RecordStore openFile(String relativePath) throws IOException{
-		RecordStore file = null;
-		WeakReference<RecordStore> ref = files.get(relativePath);
-		if (ref != null)
-			file = ref.get();
+		RecordStore file = files.get(relativePath);
 		if (file == null){
 			file = new RecordStore(this, relativePath);
-			files.put(relativePath, new WeakReference<>(file));
+			files.put(relativePath, file);
 		}
 		return file;
-	}
-
-	public List<PeerId> getDevices(){
-		List<PeerId> devices = new ArrayList<>();
-		for(File f : root.listFiles()){
-			if (!f.isDirectory() || !Hex.isHex(f.getName()))
-				continue;
-			devices.add(new PeerId(f.getName()));
-		}
-		return devices;
-	}
-
-	public <T> boolean exists(Factory<T> factory, PeerId peer){
-		return new File (root, peer.toString()+"/"+factory.getFileName()).exists();
-	}
-
-	public <T> RecordIterator<T> openIterator(Factory<T> factory, PeerId peer) throws IOException {
-		return openIterator(factory, peer.toString());
 	}
 
 	public <T> RecordIterator<T> openIterator(Factory<T> factory, String folder) throws IOException {
@@ -83,22 +66,18 @@ public class Storage {
 		return new RecordIterator<>(file, factory);
 	}
 
-	public <T> void appendRecord(Factory<T> factory, PeerId peer, T record) throws IOException {
-		RecordIterator<T> iterator = openIterator(factory, peer);
-		iterator.append(record);
-	}
-
-	public <T> T getLastRecord(Factory<T> factory, PeerId peer) throws IOException {
-		RecordIterator<T> iterator = openIterator(factory, peer);
-		return iterator.readLast();
-	}
-
 	public <T> T getLastRecord(Factory<T> factory, String folder) throws IOException {
 		RecordIterator<T> iterator = openIterator(factory, folder);
 		return iterator.readLast();
 	}
 
-	public void close(){
+	public void close() throws IOException {
+		// TODO throw if being observed?
+		observable.deleteObservers();
+		for(RecordStore file : files.values()){
+			file.close();
+		}
+		files.clear();
 		close(ptr);
 		ptr = 0;
 	}

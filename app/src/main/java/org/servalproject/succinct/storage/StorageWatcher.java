@@ -10,16 +10,16 @@ import java.io.IOException;
 import java.util.Observable;
 
 public abstract class StorageWatcher<T> extends AndroidObserver{
-	private final Storage store;
+	protected final TeamStorage store;
 	private final Factory<T> factory;
 	private static final String TAG = "StorageWatcher";
 
-	public StorageWatcher(Handler handler, Storage store, Factory<T> factory){
+	public StorageWatcher(Handler handler, TeamStorage store, Factory<T> factory){
 		super(handler);
 		this.store = store;
 		this.factory = factory;
 	}
-	public StorageWatcher(Storage store, Factory<T> factory){
+	public StorageWatcher(TeamStorage store, Factory<T> factory){
 		super();
 		this.store = store;
 		this.factory = factory;

@@ -200,6 +200,7 @@ public class RecordStore {
 	}
 
 	public void close() throws IOException {
+		observable.deleteObservers();
 		file.close();
 		close(ptr);
 		ptr = 0;

@@ -26,6 +26,7 @@ import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import org.servalproject.succinct.storage.TeamStorage;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.team.TeamAdapter;
 import org.servalproject.succinct.utils.AndroidObserver;
@@ -185,7 +186,7 @@ public class TeamFragment extends Fragment {
                         try {
                             Team t = teamAdapter.getSelected();
                             if (t == null) return;
-                            app.joinTeam(t.id);
+                            TeamStorage.joinTeam(app, t, app.networks.myId);
                             state = TEAM_STATE_ACTIVE;
                             redraw();
                         } catch (IOException e) {
@@ -206,8 +207,7 @@ public class TeamFragment extends Fragment {
                 TextView status = (TextView) view.findViewById(R.id.team_status_text);
                 String myTeamName = null;
                 try {
-                    // TODO cache?
-                    Team myTeam = app.teamStorage.getLastRecord(Team.factory, app.teamStorage.teamId);
+                    Team myTeam = app.teamStorage.getTeam();
                     if (myTeam != null)
                         myTeamName  = myTeam.name;
                     else
@@ -304,7 +304,9 @@ public class TeamFragment extends Fragment {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 try {
-                    app.createTeam(input.getText().toString());
+                    TeamStorage.createTeam(app,
+                            input.getText().toString(),
+                            app.networks.myId);
                     state = TEAM_STATE_ACTIVE;
                     redraw();
                 } catch (IOException e) {

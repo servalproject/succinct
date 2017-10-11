@@ -58,12 +58,12 @@ abstract class QueueWatcher<T> extends StorageWatcher<T> {
 			PeerId peerId = e.getKey();
 
 			// always skip peers if they aren't enrolled
-			if (!app.membershipList.isActive(peerId)) {
+			if (!store.getMembers().isActive(peerId)) {
 				Log.v(TAG, "Skipping " + peerId + ", not enrolled?");
 				continue;
 			}
 
-			if (app.membershipList.getPosition(peerId) > 255) {
+			if (store.getMembers().getPosition(peerId) > 255) {
 				Log.v(TAG, "Skipping " + peerId + ", too many?");
 				continue;
 			}

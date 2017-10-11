@@ -3,6 +3,7 @@ package org.servalproject.succinct.team;
 import org.servalproject.succinct.networking.PeerId;
 import org.servalproject.succinct.storage.RecordIterator;
 import org.servalproject.succinct.storage.Storage;
+import org.servalproject.succinct.storage.TeamStorage;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -12,24 +13,17 @@ import java.util.List;
 import java.util.Set;
 
 public class MembershipList {
-	private final Storage store;
+	private final TeamStorage store;
 	private final HashMap<PeerId, Integer> positions = new HashMap<>();
 	private final Set<PeerId> removed = new HashSet<>();
 	private final RecordIterator<Membership> iterator;
 	private final List<TeamMember> members = new ArrayList<>();
 
-	private MembershipList(Storage store) throws IOException {
+	public MembershipList(TeamStorage store) throws IOException {
 		this.store = store;
 		iterator = store.openIterator(Membership.factory, store.teamId);
 		iterator.start();
 		members.add(new TeamMember("","EOC"));
-	}
-
-	private static MembershipList instance;
-	public static MembershipList getInstance(Storage store) throws IOException {
-		if (instance==null)
-			instance = new MembershipList(store);
-		return instance;
 	}
 
 	public TeamMember getTeamMember(PeerId id) throws IOException {
@@ -54,7 +48,14 @@ public class MembershipList {
 			Membership membership = iterator.read();
 			if (membership.enroll){
 				if (!positions.containsKey(membership.peerId)) {
-					TeamMember member = store.getLastRecord(TeamMember.factory, membership.peerId);
+					RecordIterator<TeamMember> recordIterator = store.openIterator(TeamMember.factory, membership.peerId);
+					recordIterator.end();
+					TeamMember member = null;
+					while(recordIterator.prev()){
+						member = recordIterator.read();
+						if (member.name!=null)
+							break;
+					}
 					int pos = members.size();
 					members.add(member);
 					positions.put(membership.peerId, pos);

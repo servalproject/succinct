@@ -15,6 +15,7 @@ import org.servalproject.succinct.networking.PeerId;
 import org.servalproject.succinct.storage.RecordIterator;
 import org.servalproject.succinct.storage.Storage;
 import org.servalproject.succinct.storage.StorageWatcher;
+import org.servalproject.succinct.storage.TeamStorage;
 import org.servalproject.succinct.team.MembershipList;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.team.TeamMember;
@@ -25,10 +26,8 @@ public class App extends Application {
 	public static Handler UIHandler;
 	private RockMessaging rock;
 	private SharedPreferences prefs;
-	public Storage teamStorage;
+	public TeamStorage teamStorage;
 	public Networks networks;
-	public MembershipList membershipList;
-	private TeamMember me;
 
 	// a single background thread for short work tasks
 	public static Handler backgroundHandler;
@@ -91,65 +90,12 @@ public class App extends Application {
 			}
 			PeerId teamId = fromPreference(prefs, TEAM_ID);
 			if (teamId!=null)
-				teamStorage = new Storage(this, teamId);
+				TeamStorage.reloadTeam(this, teamId, myId);
 			networks = Networks.init(this, myId);
 
-			if (teamStorage!=null) {
-				postJoinTeam();
-			}
 		} catch (java.io.IOException e) {
 			throw new IllegalStateException("");
 		}
-	}
-
-	public TeamMember getMe() throws IOException {
-		if (teamStorage == null)
-			return null;
-		if (me == null)
-			me = teamStorage.getLastRecord(TeamMember.factory, networks.myId);
-		return me;
-	}
-
-	public void createTeam(String name) throws IOException {
-		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-		String myName = prefs.getString(App.MY_NAME, null);
-		String myId = prefs.getString(App.MY_EMPLOYEE_ID, null);
-		TeamMember me = new TeamMember(myId, myName);
-		PeerId teamId = new PeerId();
-		Storage storage = new Storage(this, teamId);
-		Team team = new Team(System.currentTimeMillis(), teamId, networks.myId, name);
-		storage.appendRecord(Team.factory, teamId, team);
-		storage.appendRecord(TeamMember.factory, networks.myId, me);
-
-		teamStorage = storage;
-		this.me = me;
-		SharedPreferences.Editor ed = prefs.edit();
-		ed.putString(TEAM_ID, teamId.toString());
-		ed.apply();
-
-		postJoinTeam();
-	}
-
-	public void joinTeam(PeerId teamId) throws IOException {
-		if (teamStorage!=null)
-			throw new IllegalStateException("Already in a team");
-		SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-		String myName = prefs.getString(App.MY_NAME, null);
-		String myId = prefs.getString(App.MY_EMPLOYEE_ID, null);
-		TeamMember me = new TeamMember(myId, myName);
-
-		Storage storage = new Storage(this, teamId);
-		storage.appendRecord(TeamMember.factory, networks.myId, me);
-
-		teamStorage = storage;
-		this.me = me;
-		SharedPreferences.Editor ed = prefs.edit();
-		ed.putString(TEAM_ID, teamId.toString());
-		ed.apply();
-		// trigger a heartbeat now, which should start syncing with existing peers almost immediately
-		networks.setAlarm(0);
-
-		postJoinTeam();
 	}
 
 	@Override
@@ -157,27 +103,5 @@ public class App extends Application {
 		if (rock!=null && level!=TRIM_MEMORY_UI_HIDDEN)
 			rock.onTrimMemory(level);
 		super.onTrimMemory(level);
-	}
-
-	private void postJoinTeam() throws IOException {
-		membershipList = MembershipList.getInstance(teamStorage);
-		backgroundHandler.post(new Runnable() {
-			@Override
-			public void run() {
-				MessageQueue.init(App.this);
-				StorageWatcher<StoredChatMessage> chatWatcher = new StorageWatcher<StoredChatMessage>(backgroundHandler, teamStorage, StoredChatMessage.factory) {
-					@Override
-					protected void Visit(PeerId peer, RecordIterator<StoredChatMessage> records) throws IOException {
-						// todo wait until we have peer's name from id file
-						records.reset("imported");
-						ChatDatabase db = ChatDatabase.getInstance(App.this);
-						// todo handle duplicate records in case previous process inserted without saving mark?
-						db.insert(teamStorage.teamId, peer, records);
-						records.mark("imported");
-					}
-				};
-				chatWatcher.activate();
-			}
-		});
 	}
 }

@@ -9,6 +9,10 @@ public class TeamMember {
     public final String employeeId;
     public final String name;
 
+    public TeamMember(){
+        this(null,null);
+    }
+
     public TeamMember(String employeeId, String name){
         this.employeeId = employeeId;
         this.name = name;
@@ -22,6 +26,8 @@ public class TeamMember {
 
         @Override
         public TeamMember create(DeSerialiser serialiser) {
+            if (!serialiser.hasRemaining())
+                return new TeamMember();
             String employeeId = serialiser.getString();
             String name = serialiser.getString();
             return new TeamMember(employeeId, name);
@@ -29,6 +35,8 @@ public class TeamMember {
 
         @Override
         public void serialise(Serialiser serialiser, TeamMember object) {
+            if (object.name == null)
+                return;
             serialiser.putString(object.employeeId);
             serialiser.putString(object.name);
         }
