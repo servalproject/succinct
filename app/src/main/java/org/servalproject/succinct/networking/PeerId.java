@@ -10,6 +10,7 @@ import java.util.Arrays;
 public class PeerId {
 	// How long does an ID need to be?
 	public static final int LEN=8;
+	public static final PeerId EOC = new PeerId("0000000000000000");
 	public final byte[] id;
 
 	public PeerId(String value){

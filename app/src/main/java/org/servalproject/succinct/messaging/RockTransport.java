@@ -126,7 +126,9 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 
 		if (obj != null && obj instanceof RockMessage) {
 			RockMessage m = (RockMessage) obj;
-			if (m.status!=null) {
+			if (m.incoming){
+				messageQueue.receiveFragment(m.bytes);
+			} else if (m.status!=null) {
 				switch (m.status) {
 					case R7MessageStatusReceived:
 						// incoming??

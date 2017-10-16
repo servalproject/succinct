@@ -24,6 +24,7 @@ public class MembershipList {
 		iterator = store.openIterator(Membership.factory, store.teamId);
 		iterator.start();
 		members.add(new TeamMember("","EOC"));
+		positions.put(PeerId.EOC, 0);
 	}
 
 	public TeamMember getTeamMember(PeerId id) throws IOException {

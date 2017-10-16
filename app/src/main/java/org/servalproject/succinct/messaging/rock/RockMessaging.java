@@ -618,9 +618,6 @@ public class RockMessaging {
 		@Override
 		public void messageProgressCompleted(short i) {
 			Log.v(TAG, "messageProgressCompleted("+i+")");
-			RockMessage message = getMessage(i, false);
-			message.completed = true;
-			observable.notifyObservers(message);
 		}
 
 		@Override
@@ -667,10 +664,6 @@ public class RockMessaging {
 		public void messageProgressUpdated(short i, int part, int total) {
 			// part>total indicates complete?
 			Log.v(TAG, "messageProgressUpdated("+i+", "+part+", "+total+")");
-			RockMessage message = getMessage(i, false);
-			message.part = part;
-			message.total = total;
-			observable.notifyObservers(message);
 		}
 
 		@Override

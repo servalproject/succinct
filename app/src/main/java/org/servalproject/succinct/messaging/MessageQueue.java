@@ -11,18 +11,18 @@ import android.util.Log;
 
 import org.servalproject.succinct.App;
 import org.servalproject.succinct.BuildConfig;
+import org.servalproject.succinct.chat.ChatDatabase;
 import org.servalproject.succinct.chat.StoredChatMessage;
 import org.servalproject.succinct.forms.Form;
 import org.servalproject.succinct.location.LocationFactory;
 import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.networking.PeerId;
+import org.servalproject.succinct.storage.DeSerialiser;
 import org.servalproject.succinct.storage.RecordIterator;
 import org.servalproject.succinct.storage.Serialiser;
-import org.servalproject.succinct.storage.Storage;
 import org.servalproject.succinct.storage.StorageWatcher;
 import org.servalproject.succinct.storage.TeamStorage;
 import org.servalproject.succinct.team.Membership;
-import org.servalproject.succinct.team.MembershipList;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.team.TeamMember;
 import org.servalproject.succinct.utils.WakeAlarm;
@@ -36,14 +36,18 @@ import java.io.RandomAccessFile;
 import java.io.Reader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.Date;
 
 // Manage the queue of outgoing messages / fragments
 public class MessageQueue {
 	private final App app;
 	private final TeamStorage store;
+	private final RecordIterator<StoredChatMessage> eocMessages;
+	private final RecordIterator<Fragment> incomingFragments;
 	private final RecordIterator<Fragment> fragments;
 	private final RecordIterator<Membership> members;
 	private final RecordIterator<Team> team;
@@ -72,6 +76,9 @@ public class MessageQueue {
 		members = store.openIterator(Membership.factory, store.teamId);
 		team = store.openIterator(Team.factory, store.teamId);
 		team.reset("sent");
+
+		incomingFragments = store.openIterator(Fragment.factory, PeerId.EOC);
+		eocMessages = store.openIterator(StoredChatMessage.factory, PeerId.EOC);
 
 		fragments = store.openIterator(Fragment.factory, "messaging");
 		Fragment last = fragments.readLast();
@@ -160,6 +167,12 @@ public class MessageQueue {
 		};
 
 		chatWatcher = new QueueWatcher<StoredChatMessage>(this, app, StoredChatMessage.factory) {
+			@Override
+			boolean findNext(PeerId peer, RecordIterator<StoredChatMessage> records) throws IOException {
+				// don't echo EOC messages back at them....
+				return !peer.equals(PeerId.EOC) && super.findNext(peer, records);
+			}
+
 			@Override
 			boolean generateMessage(PeerId peer, RecordIterator<StoredChatMessage> records) throws IOException {
 				StoredChatMessage msg = records.read();
@@ -568,6 +581,72 @@ public class MessageQueue {
 	// one of our services might be ready for a new fragment
 	public void onStateChanged(){
 		alarm.setAlarm(AlarmManager.ELAPSED_REALTIME_WAKEUP, WakeAlarm.NOW);
+	}
+
+	public void receiveFragment(byte[] bytes) {
+		try {
+			incomingFragments.append(new Fragment(System.currentTimeMillis(), bytes));
+
+			Team myTeam = store.getTeam();
+			if (myTeam == null)
+				return;
+
+			incomingFragments.reset("processed");
+			while(incomingFragments.next()){
+				try {
+					Fragment f = incomingFragments.read();
+					if (f.bytes.length < 16) {
+						Log.v(TAG, "Skip, incoming fragment is too short");
+						continue;
+					}
+					ByteBuffer b = ByteBuffer.wrap(f.bytes);
+					b.order(ByteOrder.BIG_ENDIAN);
+					PeerId teamId = new PeerId(b);
+					if (!store.teamId.equals(teamId)) {
+						Log.v(TAG, "Skip, team is not the same");
+						continue;
+					}
+					int seq = b.getInt();
+					int offset = b.get() & 0xFF;
+					if (offset!=0) {
+						Log.v(TAG, "Skip, fragmentation is not yet supported");
+						continue;
+					}
+					int msgType = b.get() & 0xFF;
+					int len = b.getShort() & 0xFFFF;
+					if (len!=b.remaining()) {
+						Log.v(TAG, "Skip, fragmentation is not yet supported");
+						continue;
+					}
+					DeSerialiser serialiser = new DeSerialiser(b);
+					switch (msgType){
+						case MESSAGE:
+							int position = serialiser.getByte() & 0xFF;
+							if (position != 0) {
+								Log.v(TAG, "Skip, team member should be 0");
+								continue;
+							}
+							long time = serialiser.getTime(myTeam.epoc);
+							String content = serialiser.getString();
+
+							eocMessages.append(
+									new StoredChatMessage(
+									ChatDatabase.TYPE_MESSAGE,
+									new Date(time), content));
+							break;
+						default:
+							Log.v(TAG, "Skip, unsupported message type "+msgType);
+					}
+				}catch (Exception e){
+					Log.e(TAG, e.getMessage());
+				}
+			}
+			incomingFragments.mark("processed");
+
+		} catch (IOException e) {
+			throw new IllegalStateException(e);
+		}
+
 	}
 
 	private class LocationQueueWatcher extends QueueWatcher<Location> {
