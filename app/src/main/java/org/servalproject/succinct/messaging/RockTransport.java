@@ -107,28 +107,15 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 		return SUCCESS;
 	}
 
-	private void tearDown(){
-		if (sendingMsg!=null) {
-			Log.v(TAG, "Waiting for confirmation");
-			return;
-		}
-
-		if (messaging.canDisconnect()){
-			messaging.disconnect();
-			return;
-		}
-
-		// TODO disable bluetooth too?
-	}
-
 	@Override
 	public void done() {
 		messagingRequired = false;
-		tearDown();
 	}
 
 	@Override
 	public void observe(Observable observable, Object obj) {
+		boolean callback = messagingRequired;
+
 		if (obj != null && obj instanceof RockMessage) {
 			RockMessage m = (RockMessage) obj;
 			switch (m.status){
@@ -147,10 +134,10 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 					// TODO remember fragment send state across restarts
 					// (and between team members...)!
 					if (m.id == sendingMsg.id) {
+						// TODO, callback to indicate success / failure of delivery && state changed
 						sendingMsg = null;
 						sendingFragment = null;
-						messageQueue.onStateChanged();
-						// TODO, callback to indicate success / failure of delivery && state changed
+						callback = true;
 					}
 					break;
 				default:
@@ -158,7 +145,7 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 					if (m.id == sendingMsg.id) {
 						sendingMsg = null;
 						sendingFragment = null;
-						messageQueue.onStateChanged();
+						callback = true;
 					}
 			}
 		}
@@ -173,15 +160,12 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 					SharedPreferences.Editor ed = prefs.edit();
 					ed.putString(App.PAIRED_ROCK, deviceId);
 					ed.apply();
-					messageQueue.onStateChanged();
-					return;
+					callback = true;
 				}
 			}
 		}
-		if (messagingRequired) {
+		
+		if (callback)
 			messageQueue.onStateChanged();
-		} else {
-			tearDown();
-		}
 	}
 }
