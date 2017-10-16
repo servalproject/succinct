@@ -62,10 +62,12 @@ public class RockMessaging {
 	private R7CommandType commandType;
 	private String lastAction = null;
 	private R7DeviceError lastError;
+	private RockMessage lastMessage;
 
 	private short inboxCount;
 
 	private int batteryLevel;
+	private int iridiumStatus=-1;
 
 	private Location lastFix;
 
@@ -130,7 +132,9 @@ public class RockMessaging {
 		if (connectionState == null)
 			return "Initialising";
 		if (connectedDevice!=null){
-			return comms.isConnected()+" "+connectionState+" to "+connectedDevice.getName()+" "+lockState;
+			return comms.isConnected()+" "+connectionState+
+					" to "+connectedDevice.getName()+" "+lockState+
+					(isIridiumAvailable()?"":" NO SAT");
 		}
 		return comms.isConnected()+" "+connectionState;
 	}
@@ -161,8 +165,7 @@ public class RockMessaging {
 	}
 
 	public boolean canDisconnect(){
-		return connectionState == R7ConnectionState.R7ConnectionStateConnecting||
-				connectionState == R7ConnectionState.R7ConnectionStateConnected;
+		return isConnecting(connectionState);
 	}
 
 	public boolean isScanning(){
@@ -246,9 +249,14 @@ public class RockMessaging {
 		comms.connect(deviceId);
 	}
 
+	private boolean isConnecting(R7ConnectionState state){
+		return state == R7ConnectionState.R7ConnectionStateConnecting ||
+				state == R7ConnectionState.R7ConnectionStateConnected;
+	}
+
+
 	public void disconnect(){
-		if (connectionState == R7ConnectionState.R7ConnectionStateConnecting||
-				connectionState == R7ConnectionState.R7ConnectionStateConnected) {
+		if (isConnecting(connectionState)) {
 			setLastAction("Disconnecting");
 			comms.disconnect();
 		}
@@ -285,6 +293,20 @@ public class RockMessaging {
 	public void requestBeep(){
 		setLastAction("Requesting BEEP");
 		comms.requestBeep();
+	}
+
+	public boolean isIridiumAvailable(){
+		return iridiumStatus>0;
+	}
+
+	public void disableTimeout(){
+		Log.v(TAG, "Disabling usage timeout!");
+		comms.disableUsageTimeout();
+	}
+
+	public void enableTimeout(){
+		Log.v(TAG, "Enabling usage timeout");
+		comms.enableUsageTimeout();
 	}
 
 	public boolean canSendMessage(){
@@ -324,13 +346,18 @@ public class RockMessaging {
 	private RockMessage newMessage(short id, boolean incoming){
 		RockMessage ret = new RockMessage(id, incoming);
 		messages.put(id, ret);
+		lastMessage = ret;
 		return ret;
 	}
 
 	private RockMessage getMessage(short id, boolean incoming){
 		if (messages.containsKey(id))
-			return messages.get(id);
+			return (lastMessage = messages.get(id));
 		return newMessage(id, incoming);
+	}
+
+	public RockMessage lastUpdatedMessage(){
+		return lastMessage;
 	}
 
 	public void onTrimMemory(int level){
@@ -440,18 +467,22 @@ public class RockMessaging {
 		@Override
 		public void deviceDisconnected() {
 			Log.v(TAG, "deviceDisconnected");
-			RockMessaging.this.connectedDevice = null;
-			RockMessaging.this.activationState = null;
-			RockMessaging.this.lockState = null;
-			RockMessaging.this.genericDevice = null;
-			deviceId = null;
-			observable.notifyObservers();
 		}
 
 		@Override
 		public void deviceParameterUpdated(DeviceParameter deviceParameter) {
 			R7GenericDeviceParameter type = R7GenericDeviceParameter.values()[deviceParameter.getIdentifier()];
 			Boolean ro = deviceParameter.getReadonly();
+			if (deviceParameter.getAvailiable() && deviceParameter.isCachedValueUsable()) {
+				int val = deviceParameter.getCachedValue();
+
+				switch (type) {
+					case R7GenericDeviceParameterIridiumStatus:
+						RockMessaging.this.iridiumStatus = val;
+						observable.notifyObservers();
+						break;
+				}
+			}
 
 			Log.v(TAG, "deviceParameterUpdated("+
 					type+" ("+deviceParameter.getLabel()+
@@ -470,8 +501,28 @@ public class RockMessaging {
 		public void deviceStateChanged(R7ConnectionState stateTo, R7ConnectionState stateFrom) {
 			Log.v(TAG, "deviceStateChanged("+stateTo+", "+stateFrom+")");
 			RockMessaging.this.connectionState = stateTo;
+
+			// Don't notify
+			if (stateFrom == stateTo)
+				return;
+			// Probably due to us re-enabling, so ignore that too
+			if (stateFrom == R7ConnectionState.R7ConnectionStateIdle
+					&& stateTo == R7ConnectionState.R7ConnectionStateReady)
+				return;
+
 			RockMessaging.this.lastAction = null;
 			RockMessaging.this.lastError = null;
+
+			if (isConnecting(stateFrom) && !isConnecting(stateTo)){
+				RockMessaging.this.connectedDevice = null;
+				RockMessaging.this.activationState = null;
+				RockMessaging.this.lockState = null;
+				RockMessaging.this.genericDevice = null;
+				RockMessaging.this.lastMessage = null;
+				RockMessaging.this.iridiumStatus = -1;
+				deviceId = null;
+				observable.notifyObservers();
+			}
 			observable.notifyObservers();
 		}
 
@@ -486,9 +537,10 @@ public class RockMessaging {
 		public void deviceLockStatusUpdated(R7LockState r7LockState) {
 			Log.v(TAG, "deviceLockStatusUpdated("+r7LockState+")");
 			RockMessaging.this.lockState = r7LockState;
-			observable.notifyObservers();
 
 			if (genericDevice!=null && r7LockState == R7LockState.R7LockStateUnlocked){
+				RockMessaging.this.lastAction = null;
+				RockMessaging.this.lastError = null;
 			/*
 				// device is now ready for more commands...
 				requestGpsFix();
@@ -500,6 +552,8 @@ public class RockMessaging {
 				}
 			*/
 			}
+
+			observable.notifyObservers();
 		}
 
 		@Override

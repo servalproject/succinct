@@ -101,15 +101,20 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 		if (available != SUCCESS)
 			return available;
 
+		messaging.disableTimeout();
+
 		Log.v(TAG, "Sending message");
 		sendingMsg = messaging.sendRawMessage((short)fragment.seq, fragment.bytes);
 		sendingFragment = fragment;
+
 		return SUCCESS;
 	}
 
 	@Override
 	public void done() {
 		messagingRequired = false;
+		if (sendingMsg == null)
+			messaging.enableTimeout();
 	}
 
 	@Override
@@ -118,35 +123,38 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 
 		if (obj != null && obj instanceof RockMessage) {
 			RockMessage m = (RockMessage) obj;
-			switch (m.status){
-				case R7MessageStatusReceived:
-					// incoming??
-					break;
-				case R7MessageStatusReceivedByDevice:
-				case R7MessageStatusQueuedForTransmission:
-				case R7MessageStatusPending:
-				case R7MessageStatusTransmitting:
-					break;
-				case R7MessageStatusTransmitted:
-					// Lets annoy everyone by beeping every time we sent something
-					messaging.requestBeep();
+			if (m.status!=null) {
+				switch (m.status) {
+					case R7MessageStatusReceived:
+						// incoming??
+						break;
+					case R7MessageStatusReceivedByDevice:
+					case R7MessageStatusQueuedForTransmission:
+					case R7MessageStatusPending:
+					case R7MessageStatusTransmitting:
+						break;
+					case R7MessageStatusTransmitted:
+						// Lets annoy everyone by beeping every time we sent something
+						messaging.requestBeep();
 
-					// TODO remember fragment send state across restarts
-					// (and between team members...)!
-					if (m.id == sendingMsg.id) {
-						// TODO, callback to indicate success / failure of delivery && state changed
-						sendingMsg = null;
-						sendingFragment = null;
-						callback = true;
-					}
-					break;
-				default:
-					// errors...
-					if (m.id == sendingMsg.id) {
-						sendingMsg = null;
-						sendingFragment = null;
-						callback = true;
-					}
+						// TODO remember fragment send state across restarts
+						// (and between team members...)!
+						if (m.id == sendingMsg.id) {
+							// TODO, callback to indicate success / failure of delivery && state changed
+							sendingMsg = null;
+							sendingFragment = null;
+							messaging.enableTimeout();
+							callback = true;
+						}
+						break;
+					default:
+						// errors...
+						if (m.id == sendingMsg.id) {
+							sendingMsg = null;
+							sendingFragment = null;
+							callback = true;
+						}
+				}
 			}
 		}
 		if (messaging.getLockState() == R7LockState.R7LockStateUnlocked && messaging.canSendRawMessage()){

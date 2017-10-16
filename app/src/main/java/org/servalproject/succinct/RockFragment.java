@@ -14,6 +14,7 @@ import android.widget.Button;
 import android.widget.TextView;
 
 import org.servalproject.succinct.messaging.rock.Device;
+import org.servalproject.succinct.messaging.rock.RockMessage;
 import org.servalproject.succinct.messaging.rock.RockMessaging;
 import org.servalproject.succinct.utils.AndroidObserver;
 
@@ -28,6 +29,7 @@ public class RockFragment extends Fragment implements View.OnClickListener {
 	private RecyclerView deviceList;
 	private TextView status;
 	private TextView lastError;
+	private TextView lastMessage;
 	private Button scan;
 	private Button disconnect;
 	private Button beep;
@@ -105,6 +107,7 @@ public class RockFragment extends Fragment implements View.OnClickListener {
 		deviceList = (RecyclerView) v.findViewById(R.id.device_list);
 		status = (TextView) v.findViewById(R.id.status);
 		lastError = (TextView) v.findViewById(R.id.last_error);
+		lastMessage = (TextView) v.findViewById(R.id.last_message);
 		scan = (Button) v.findViewById(R.id.scan);
 		beep = (Button) v.findViewById(R.id.beep);
 		disconnect = (Button) v.findViewById(R.id.disconnect);
@@ -143,6 +146,14 @@ public class RockFragment extends Fragment implements View.OnClickListener {
 
 	private void bind() {
 		status.setText(rock.getStatus());
+
+		RockMessage lastMsg = rock.lastUpdatedMessage();
+		if (lastMsg != null){
+			lastMessage.setText((lastMsg.incoming?"IN ":"OUT ")+lastMsg.id+", "+lastMsg.status+" ("+lastMsg.part+"/"+lastMsg.total+")");
+			lastMessage.setVisibility(View.VISIBLE);
+		}else{
+			lastMessage.setVisibility(View.GONE);
+		}
 
 		String error = rock.lastAction();
 		lastError.setText(error);
