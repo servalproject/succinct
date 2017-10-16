@@ -302,11 +302,13 @@ public class RockMessaging {
 
 	public void disableTimeout(){
 		Log.v(TAG, "Disabling usage timeout!");
+		if (comms == null) return;
 		comms.disableUsageTimeout();
 	}
 
 	public void enableTimeout(){
 		Log.v(TAG, "Enabling usage timeout");
+		if (comms == null) return;
 		comms.enableUsageTimeout();
 	}
 
@@ -363,6 +365,7 @@ public class RockMessaging {
 
 	public void onTrimMemory(int level){
 		Log.v(TAG, "onTrimMemory("+level+")");
+		if (comms == null) return;
 		comms.trimMemory(level);
 	}
 
