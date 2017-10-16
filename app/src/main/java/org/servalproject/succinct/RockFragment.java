@@ -157,8 +157,8 @@ public class RockFragment extends Fragment implements View.OnClickListener {
 		disconnect.setEnabled(enabled && rock.canDisconnect());
 		beep.setEnabled(isAllGood);
 		unlock.setEnabled(enabled && rock.isConnected() && rock.getLockState() != R7LockState.R7LockStateUnlocked);
-		send.setEnabled(enabled && rock.canSendMessage());
-		sendRaw.setEnabled(enabled && rock.canSendRawMessage());
+		send.setEnabled(isAllGood && rock.canSendMessage());
+		sendRaw.setEnabled(isAllGood && rock.canSendRawMessage());
 
 		devices.clear();
 		devices.addAll(rock.getDevices());
