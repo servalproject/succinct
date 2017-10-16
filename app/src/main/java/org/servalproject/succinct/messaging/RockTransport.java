@@ -17,13 +17,12 @@ import java.util.Observable;
 import uk.rock7.connect.enums.R7DeviceError;
 import uk.rock7.connect.enums.R7LockState;
 
-import static android.content.ContentValues.TAG;
-
 public class RockTransport extends AndroidObserver implements IMessaging{
 	private final SharedPreferences prefs;
 	private final RockMessaging messaging;
 	private final MessageQueue messageQueue;
 	private boolean messagingRequired=false;
+	private static final String TAG = "RockTransport";
 
 	public RockTransport(MessageQueue messageQueue, Context context){
 		this.messageQueue = messageQueue;
@@ -109,6 +108,11 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 	}
 
 	private void tearDown(){
+		if (sendingMsg!=null) {
+			Log.v(TAG, "Waiting for confirmation");
+			return;
+		}
+
 		if (messaging.canDisconnect()){
 			messaging.disconnect();
 			return;
@@ -127,30 +131,57 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 	public void observe(Observable observable, Object obj) {
 		if (obj != null && obj instanceof RockMessage) {
 			RockMessage m = (RockMessage) obj;
-			if (m.completed && m == sendingMsg) {
-				// TODO, callback to indicate success / failure of delivery && state changed
-				// Lets annoy everyone by beeping every time we sent something
-				messaging.requestBeep();
-				sendingMsg = null;
-				sendingFragment = null;
-				messageQueue.onStateChanged();
+			switch (m.status){
+				case R7MessageStatusReceived:
+					// incoming??
+					break;
+				case R7MessageStatusReceivedByDevice:
+				case R7MessageStatusQueuedForTransmission:
+				case R7MessageStatusPending:
+				case R7MessageStatusTransmitting:
+					break;
+				case R7MessageStatusTransmitted:
+					// Lets annoy everyone by beeping every time we sent something
+					messaging.requestBeep();
+
+					// TODO remember fragment send state across restarts
+					// (and between team members...)!
+					if (m.id == sendingMsg.id) {
+						sendingMsg = null;
+						sendingFragment = null;
+						messageQueue.onStateChanged();
+						// TODO, callback to indicate success / failure of delivery && state changed
+					}
+					break;
+				default:
+					// errors...
+					if (m.id == sendingMsg.id) {
+						sendingMsg = null;
+						sendingFragment = null;
+						messageQueue.onStateChanged();
+					}
 			}
-		} else if (messagingRequired) {
-			messageQueue.onStateChanged();
-		} else if (messaging.canSendRawMessage()){
-			// TODO settings dialog to ask the user explicitly to use this device
-			String deviceId = prefs.getString(App.PAIRED_ROCK, null);
-			if (deviceId == null) {
-				Device connected = messaging.getConnectedDevice();
-				if (connected != null) {
+		}
+		if (messaging.getLockState() == R7LockState.R7LockStateUnlocked && messaging.canSendRawMessage()){
+			Device connected = messaging.getConnectedDevice();
+			if (connected != null){
+				// TODO settings dialog to ask the user explicitly to use this device
+				String deviceId = prefs.getString(App.PAIRED_ROCK, null);
+				if (deviceId == null) {
 					Log.v(TAG, "Remembering connection to "+connected.id+" for automatic messaging");
 					deviceId = connected.id;
 					SharedPreferences.Editor ed = prefs.edit();
 					ed.putString(App.PAIRED_ROCK, deviceId);
 					ed.apply();
 					messageQueue.onStateChanged();
+					return;
 				}
 			}
+		}
+		if (messagingRequired) {
+			messageQueue.onStateChanged();
+		} else {
+			tearDown();
 		}
 	}
 }

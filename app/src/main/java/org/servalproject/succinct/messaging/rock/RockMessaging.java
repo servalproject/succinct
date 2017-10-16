@@ -303,28 +303,34 @@ public class RockMessaging {
 
 	public RockMessage sendMessage(byte bytes[]){
 		setLastAction("Sending Message");
-		return newMessage(comms.sendMessageWithData(bytes));
+		return newMessage(comms.sendMessageWithData(bytes), false);
 	}
 
 	public RockMessage sendMessage(short seq, byte bytes[]){
 		setLastAction("Sending Message");
-		return newMessage(comms.sendMessageWithDataAndIdentifier(bytes, seq));
+		return newMessage(comms.sendMessageWithDataAndIdentifier(bytes, seq), false);
 	}
 
 	public RockMessage sendRawMessage(byte bytes[]){
 		setLastAction("Sending Raw Message");
-		return newMessage(comms.sendRawMessageWithData(bytes));
+		return newMessage(comms.sendRawMessageWithData(bytes), false);
 	}
 
 	public RockMessage sendRawMessage(short seq, byte bytes[]){
 		setLastAction("Sending Raw Message");
-		return newMessage(comms.sendRawMessageWithDataAndIdentifier(bytes, seq));
+		return newMessage(comms.sendRawMessageWithDataAndIdentifier(bytes, seq), false);
 	}
 
-	private RockMessage newMessage(short id){
-		RockMessage ret = new RockMessage(id);
+	private RockMessage newMessage(short id, boolean incoming){
+		RockMessage ret = new RockMessage(id, incoming);
 		messages.put(id, ret);
 		return ret;
+	}
+
+	private RockMessage getMessage(short id, boolean incoming){
+		if (messages.containsKey(id))
+			return messages.get(id);
+		return newMessage(id, incoming);
 	}
 
 	public void onTrimMemory(int level){
@@ -568,23 +574,20 @@ public class RockMessaging {
 		@Override
 		public void messageProgressCompleted(short i) {
 			Log.v(TAG, "messageProgressCompleted("+i+")");
-			RockMessage message = messages.get(i);
-			if (message!=null){
-				message.completed = true;
-				messages.remove(i);
-				observable.notifyObservers(message);
-			}
+			RockMessage message = getMessage(i, false);
+			message.completed = true;
+			observable.notifyObservers(message);
+			messages.remove(i);
 		}
 
 		@Override
 		public boolean messageStatusUpdated(short i, R7MessageStatus r7MessageStatus) {
 			Log.v(TAG, "messageStatusUpdated("+i+", "+r7MessageStatus+")");
-			RockMessage message = messages.get(i);
-			if (message!=null){
-				message.status = r7MessageStatus;
-				observable.notifyObservers(message);
-				// which status values indicate that we will not see callbacks about this message again?
-			}
+			RockMessage message = getMessage(i, false);
+			// which status values indicate that we will not see callbacks about this message again?
+			message.status = r7MessageStatus;
+			observable.notifyObservers(message);
+
 			// if we return false, the callback should happen again
 			return true;
 		}
@@ -604,22 +607,24 @@ public class RockMessaging {
 
 		@Override
 		public boolean messageReceived(short i, byte[] bytes) {
-			// what does this message id indicate?
-			// TODO class to encapsulate the incoming message?
-			observable.notifyObservers(bytes);
+			// Does this id come from the remote end?
+			// do we see this id before now?
 			Log.v(TAG, "messageReceived("+i+", "+RockMessaging.toString(bytes)+")");
+
+			RockMessage message = new RockMessage(i, true);
+			message.bytes = bytes;
+			observable.notifyObservers(message);
+
 			return true;
 		}
 
 		@Override
 		public void messageProgressUpdated(short i, int part, int total) {
 			Log.v(TAG, "messageProgressUpdated("+i+", "+part+", "+total+")");
-			RockMessage message = messages.get(i);
-			if (message!=null){
-				message.part = part;
-				message.total = total;
-				observable.notifyObservers(message);
-			}
+			RockMessage message = getMessage(i, false);
+			message.part = part;
+			message.total = total;
+			observable.notifyObservers(message);
 		}
 
 		@Override
