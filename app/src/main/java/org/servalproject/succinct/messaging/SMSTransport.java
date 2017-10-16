@@ -1,13 +1,16 @@
 package org.servalproject.succinct.messaging;
 
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.provider.Settings;
+import android.support.v4.app.ActivityCompat;
 import android.telephony.SmsManager;
 import android.telephony.SmsMessage;
 import android.telephony.TelephonyManager;
@@ -28,7 +31,7 @@ public class SMSTransport implements IMessaging{
 	private final TelephonyManager telephonyManager;
 	private boolean airplaneMode;
 	private Fragment sending;
-	private static final String TAG = "DummyTransport";
+	private static final String TAG = "SMSTransport";
 	private static final String ACTION_SENT = "org.servalproject.succinct.SMS_SENT";
 
 	private static final String EXTRA_SEQ = "seq";
@@ -88,6 +91,9 @@ public class SMSTransport implements IMessaging{
 	public int checkAvailable(){
 		String destinationNumber = appContext.getPrefs().getString(App.SMS_DESTINATION, BuildConfig.smsDestination);
 		if (destinationNumber == null || "".equals(destinationNumber))
+			return UNAVAILABLE;
+
+		if (ActivityCompat.checkSelfPermission(appContext, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED)
 			return UNAVAILABLE;
 
 		if (airplaneMode)

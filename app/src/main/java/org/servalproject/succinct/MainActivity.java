@@ -39,15 +39,24 @@ import org.servalproject.succinct.location.LocationService;
 import org.servalproject.succinct.location.LocationService.LocationBroadcastReceiver;
 import org.servalproject.succinct.team.TeamMember;
 
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+
 public class MainActivity extends AppCompatActivity
         implements NavigationView.OnNavigationItemSelectedListener {
 
     private static final String TAG = "MainActivity";
 
-    private String[] permissionsRequired = new String[]{
+    private String[] permissionsDesired = new String[]{
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE,
+            Manifest.permission.SEND_SMS
+    };
+    private Set<String> permissionsRequired = new HashSet<>(Arrays.asList(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.WRITE_EXTERNAL_STORAGE
-    };
+    ));
     private static final int PERMISSION_CALLBACK_CONSTANT = 100;
     private static final int PERMISSION_SETTINGS_INTENT_ID = 101;
 
@@ -217,9 +226,10 @@ public class MainActivity extends AppCompatActivity
 
     private PermissionState checkAllPermissions() {
         boolean allGranted = true;
-        for (String perm : permissionsRequired) {
+        for (String perm : permissionsDesired) {
             if (ActivityCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
                 Log.d(TAG, "checkAllPermissions: not granted " + perm);
+                if (!permissionsRequired.contains(perm)) continue;
                 allGranted = false;
                 if (ActivityCompat.shouldShowRequestPermissionRationale(this, perm)) {
                     Log.d(TAG, "checkAllPermissions: show rationale " + perm);
@@ -232,7 +242,7 @@ public class MainActivity extends AppCompatActivity
             return PermissionState.PERMITTED;
         } else {
             Log.d(TAG, "checkAllPermissions: requesting permissions");
-            ActivityCompat.requestPermissions(MainActivity.this, permissionsRequired, PERMISSION_CALLBACK_CONSTANT);
+            ActivityCompat.requestPermissions(MainActivity.this, permissionsDesired, PERMISSION_CALLBACK_CONSTANT);
             return PermissionState.WAITING;
         }
     }
@@ -250,6 +260,7 @@ public class MainActivity extends AppCompatActivity
             for (int i=0; i < permissions.length; i++) {
                 if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
                     Log.d(TAG, "onRequestPermissionResult: not granted " + permissions[i]);
+                    if (!permissionsRequired.contains(permissions[i])) continue;
                     allGranted = false;
                     if (ActivityCompat.shouldShowRequestPermissionRationale(this, permissions[i])) {
                         Log.d(TAG, "onRequestPermissionResult: show rationale " + permissions[i]);
@@ -293,7 +304,7 @@ public class MainActivity extends AppCompatActivity
                 public void onClick(DialogInterface dialog, int which) {
                     dialog.cancel();
                     Log.d(TAG, "showPermissionsRationale grant dialog: requesting permissions");
-                    ActivityCompat.requestPermissions(MainActivity.this, permissionsRequired, PERMISSION_CALLBACK_CONSTANT);
+                    ActivityCompat.requestPermissions(MainActivity.this, permissionsRequired.toArray(new String[permissionsRequired.size()]), PERMISSION_CALLBACK_CONSTANT);
                 }
             });
         }
