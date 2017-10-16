@@ -212,7 +212,7 @@ public class MessageQueue {
 		fragmentBuff.position(4);
 		byte[] fragmentBytes = new byte[fragmentBuff.remaining()];
 		fragmentBuff.get(fragmentBytes);
-		fragments.append(new Fragment(fragmentBytes));
+		fragments.append(new Fragment(System.currentTimeMillis(), fragmentBytes));
 		fragmentBuff.clear();
 		fragmentBuff.putInt(0, 0);
 		return true;
