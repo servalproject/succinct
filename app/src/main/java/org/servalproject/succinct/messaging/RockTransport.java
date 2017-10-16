@@ -52,6 +52,7 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 			messaging.enable();
 			return BUSY;
 		}
+		messaging.checkState();
 
 		if (!messaging.isConnected()){
 			R7DeviceError error = messaging.getLastError();
@@ -59,6 +60,8 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 				Log.e(TAG, "Rock API returned error "+error);
 				return UNAVAILABLE;
 			}
+			if (messaging.isScanning())
+				return BUSY;
 			if (messaging.canConnect()) {
 				Log.v(TAG, "Initiating connection");
 				messaging.connect(deviceId);

@@ -10,6 +10,7 @@ import android.util.Log;
 
 import org.servalproject.succinct.BuildConfig;
 import org.servalproject.succinct.messaging.IMessaging;
+import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.utils.ChangedObservable;
 
 import java.lang.ref.WeakReference;
@@ -210,7 +211,7 @@ public class RockMessaging {
 		return devices.values();
 	}
 
-	private void checkState(){
+	public void checkState(){
 		if ((connectionState == R7ConnectionState.R7ConnectionStateIdle
 				||connectionState == R7ConnectionState.R7ConnectionStateOff)
 				&& adapter.isEnabled()) {
@@ -377,20 +378,6 @@ public class RockMessaging {
 	public void updateParameter(R7GenericDeviceParameter parameter, int value){
 		setLastAction("Updating Parameter");
 		genericDevice.updateParameter(parameter, value);
-	}
-
-	private static String toString(byte[] bytes){
-		if (bytes==null)
-			return "null";
-
-		StringBuilder sb = new StringBuilder("[");
-		for(int i=0;i<bytes.length;i++){
-			if (i>0)
-				sb.append(", ");
-			sb.append(Integer.toHexString(bytes[i] & 0xFF));
-		}
-		sb.append("]");
-		return sb.toString();
 	}
 
 	private R7DeviceDiscoveryDelegate discovery = new R7DeviceDiscoveryDelegate(){
@@ -571,7 +558,7 @@ public class RockMessaging {
 
 		@Override
 		public void deviceSerialDump(byte[] bytes) {
-			Log.v(TAG, "deviceSerialDump("+RockMessaging.toString(bytes)+")");
+			Log.v(TAG, "deviceSerialDump("+Hex.toString(bytes)+")");
 		}
 
 		@Override
@@ -631,7 +618,6 @@ public class RockMessaging {
 			RockMessage message = getMessage(i, false);
 			message.completed = true;
 			observable.notifyObservers(message);
-			messages.remove(i);
 		}
 
 		@Override
@@ -642,6 +628,8 @@ public class RockMessaging {
 			message.status = r7MessageStatus;
 			observable.notifyObservers(message);
 
+			if (r7MessageStatus == R7MessageStatus.R7MessageStatusTransmitted)
+				messages.remove(i);
 			// if we return false, the callback should happen again
 			return true;
 		}
@@ -663,7 +651,7 @@ public class RockMessaging {
 		public boolean messageReceived(short i, byte[] bytes) {
 			// Does this id come from the remote end?
 			// do we see this id before now?
-			Log.v(TAG, "messageReceived("+i+", "+RockMessaging.toString(bytes)+")");
+			Log.v(TAG, "messageReceived("+i+", "+Hex.toString(bytes)+")");
 
 			RockMessage message = new RockMessage(i, true);
 			message.bytes = bytes;
@@ -674,6 +662,7 @@ public class RockMessaging {
 
 		@Override
 		public void messageProgressUpdated(short i, int part, int total) {
+			// part>total indicates complete?
 			Log.v(TAG, "messageProgressUpdated("+i+", "+part+", "+total+")");
 			RockMessage message = getMessage(i, false);
 			message.part = part;
