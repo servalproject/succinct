@@ -15,6 +15,7 @@ import android.util.Base64;
 import android.util.Log;
 
 import org.servalproject.succinct.App;
+import org.servalproject.succinct.BuildConfig;
 import org.servalproject.succinct.networking.Hex;
 
 import java.util.ArrayList;
@@ -85,8 +86,8 @@ public class SMSTransport implements IMessaging{
 	}
 
 	public int checkAvailable(){
-		String destinationNumber = appContext.getPrefs().getString(App.SMS_DESTINATION, null);
-		if (destinationNumber == null)
+		String destinationNumber = appContext.getPrefs().getString(App.SMS_DESTINATION, BuildConfig.smsDestination);
+		if (destinationNumber == null || "".equals(destinationNumber))
 			return UNAVAILABLE;
 
 		if (airplaneMode)
@@ -108,10 +109,6 @@ public class SMSTransport implements IMessaging{
 		if (available != SUCCESS)
 			return available;
 
-		String destinationNumber = appContext.getPrefs().getString(App.SMS_DESTINATION, null);
-		if (destinationNumber == null)
-			return UNAVAILABLE;
-
 		sending = fragment;
 		Log.v(TAG, "Sending "+ Hex.toString(fragment.bytes));
 
@@ -132,6 +129,7 @@ public class SMSTransport implements IMessaging{
 			send.add(PendingIntent.getBroadcast(appContext, 0, sentIntent, 0));
 		}
 
+		String destinationNumber = appContext.getPrefs().getString(App.SMS_DESTINATION, BuildConfig.smsDestination);
 		smsManager.sendMultipartTextMessage(destinationNumber, null, parts, send, null);
 
 		return SUCCESS;
