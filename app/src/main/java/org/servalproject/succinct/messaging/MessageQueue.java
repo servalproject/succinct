@@ -126,12 +126,21 @@ public class MessageQueue {
 			@Override
 			protected void Visit(PeerId peer, RecordIterator<TeamMember> records) throws IOException {
 				records.reset("enrolled");
-				if (records.getOffset()==0 && records.next()) {
-					Log.v(TAG, "Enrolling "+peer+" in the team list");
-					membershipList.enroll(peer);
-					records.next();
-					records.mark("enrolled");
-					alarm.setAlarm(AlarmManager.ELAPSED_REALTIME, -1);
+				if (records.getOffset() != records.store.EOF){
+					records.end();
+					if (records.prev()){
+						TeamMember member = records.read();
+						if (member.name == null){
+							Log.v(TAG, "Removing "+peer+" from the team list");
+							membershipList.revoke(peer);
+						}else{
+							Log.v(TAG, "Enrolling "+peer+" in the team list");
+							membershipList.enroll(peer);
+						}
+						records.next();
+						records.mark("enrolled");
+						alarm.setAlarm(AlarmManager.ELAPSED_REALTIME, WakeAlarm.NOW);
+					}
 				}
 			}
 		};
@@ -171,7 +180,7 @@ public class MessageQueue {
 
 		locationWatcher = new LocationQueueWatcher();
 
-		alarm.setAlarm(AlarmManager.ELAPSED_REALTIME, -1);
+		alarm.setAlarm(AlarmManager.ELAPSED_REALTIME, WakeAlarm.NOW);
 	}
 
 	private static MessageQueue instance=null;
@@ -565,7 +574,7 @@ public class MessageQueue {
 
 	// one of our services might be ready for a new fragment
 	public void onStateChanged(){
-		alarm.setAlarm(AlarmManager.ELAPSED_REALTIME_WAKEUP, -1);
+		alarm.setAlarm(AlarmManager.ELAPSED_REALTIME_WAKEUP, WakeAlarm.NOW);
 	}
 
 	private class LocationQueueWatcher extends QueueWatcher<Location> {

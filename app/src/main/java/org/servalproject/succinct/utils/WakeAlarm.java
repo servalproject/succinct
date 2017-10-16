@@ -14,10 +14,12 @@ public abstract class WakeAlarm {
 	protected final Handler handler;
 	protected final AlarmManager am;
 	protected final String tag;
-	protected int flag;
+	protected int flag=-1;
 	protected long nextAlarm=-1;
 	protected final Runnable onAlarm;
 	protected static final String TAG = "WakeAlarm";
+
+	public static final int NOW = 0;
 
 	protected WakeAlarm(Context context, String tag, Handler handler, Runnable onAlarm){
 		this.context = context;
