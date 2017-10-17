@@ -126,6 +126,9 @@ public class MainActivity extends AppCompatActivity
         bindService(new Intent(this, LocationService.class), locationServiceConnection, Context.BIND_IMPORTANT);
         Log.d(TAG, "registering receiver for GPS status");
         locationBroadcastReceiver.register(this);
+
+        if (getFragmentManager().findFragmentByTag("CURRENT") == null)
+            navigate(R.id.nav_team, getString(R.string.nav_team));
     }
 
     @Override
@@ -171,11 +174,7 @@ public class MainActivity extends AppCompatActivity
         return super.onOptionsItemSelected(item);
     }
 
-    @SuppressWarnings("StatementWithEmptyBody")
-    @Override
-    public boolean onNavigationItemSelected(MenuItem item) {
-        // Handle navigation view item clicks here.
-        int id = item.getItemId();
+    private boolean navigate(int id, CharSequence newTitle){
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
 
         if (id == selectedFragment)
@@ -184,7 +183,6 @@ public class MainActivity extends AppCompatActivity
         selectedFragment = id;
 
         Fragment newFragment = null;
-        CharSequence newTitle = item.getTitle();
         switch (id){
             case R.id.nav_team:
                 newFragment = new TeamFragment();
@@ -209,7 +207,7 @@ public class MainActivity extends AppCompatActivity
 
         if (newFragment != null) {
             FragmentTransaction transaction = getFragmentManager().beginTransaction();
-            transaction.replace(R.id.main_frame, newFragment);
+            transaction.replace(R.id.main_frame, newFragment, "CURRENT");
             // transaction.addToBackStack(null);
             transaction.commit();
             toolbar.setTitle(newTitle);
@@ -218,6 +216,13 @@ public class MainActivity extends AppCompatActivity
         DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
         drawer.closeDrawer(GravityCompat.START);
         return true;
+    }
+
+    @SuppressWarnings("StatementWithEmptyBody")
+    @Override
+    public boolean onNavigationItemSelected(MenuItem item) {
+        // Handle navigation view item clicks here.
+        return navigate(item.getItemId(), item.getTitle());
     }
 
     public @Nullable LocationService getLocationService() {
