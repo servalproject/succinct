@@ -135,7 +135,7 @@ public class RockMessaging {
 		if (connectedDevice!=null){
 			return comms.isConnected()+" "+connectionState+
 					" to "+connectedDevice.getName()+" "+lockState+
-					(isIridiumAvailable()?"":" NO SAT");
+					(isIridiumAvailable()?" TRANSMITTING":"");
 		}
 		return comms.isConnected()+" "+connectionState;
 	}
@@ -243,10 +243,10 @@ public class RockMessaging {
 
 	public void connect(String deviceId){
 		setLastAction("Connecting to "+deviceId);
-		checkState();
 		this.deviceId = deviceId;
 		this.lastError = null;
 		this.lockState = null;
+		checkState();
 		comms.connect(deviceId);
 	}
 
@@ -495,8 +495,10 @@ public class RockMessaging {
 			// Don't notify
 			if (stateFrom == stateTo)
 				return;
-			// Probably due to us re-enabling, so ignore that too
-			if (stateFrom == R7ConnectionState.R7ConnectionStateIdle
+
+			// If we're connecting, drop the state change to ready
+			// TODO better tracking of rock's internal state & what we're trying to do.
+			if (deviceId!=null && stateFrom == R7ConnectionState.R7ConnectionStateIdle
 					&& stateTo == R7ConnectionState.R7ConnectionStateReady)
 				return;
 
@@ -511,7 +513,6 @@ public class RockMessaging {
 				RockMessaging.this.lastMessage = null;
 				RockMessaging.this.iridiumStatus = -1;
 				deviceId = null;
-				observable.notifyObservers();
 			}
 			observable.notifyObservers();
 		}

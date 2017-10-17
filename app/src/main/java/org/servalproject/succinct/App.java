@@ -48,6 +48,8 @@ public class App extends Application {
 	public static final String TEAM_ID = "team_id";
 	public static final String MY_NAME = "my_name";
 	public static final String MY_EMPLOYEE_ID = "my_employee_id";
+	// set this to true to test rock's lifecycle without actually sending anything
+	public static final String PRETEND_ROCK = "pretend_rock";
 	public static final String PAIRED_ROCK = "paired_rock";
 	public static final String SMS_DESTINATION = "sms_destination";
 	public static final String BASE_SERVER_URL = "base_server_url";

@@ -10,6 +10,7 @@ import org.servalproject.succinct.App;
 import org.servalproject.succinct.messaging.rock.Device;
 import org.servalproject.succinct.messaging.rock.RockMessage;
 import org.servalproject.succinct.messaging.rock.RockMessaging;
+import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.utils.AndroidObserver;
 
 import java.util.Observable;
@@ -104,12 +105,15 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 		if (available != SUCCESS)
 			return available;
 
-		messaging.disableTimeout();
+		if (prefs.getBoolean(App.PRETEND_ROCK, false)) {
+			Log.v(TAG, "Faking send of fragment "+ Hex.toString(fragment.bytes));
+		}else{
+			messaging.disableTimeout();
 
-		Log.v(TAG, "Sending message");
-		sendingMsg = messaging.sendRawMessage((short)fragment.seq, fragment.bytes);
-		sendingFragment = fragment;
-
+			Log.v(TAG, "Sending message");
+			sendingMsg = messaging.sendRawMessage((short) fragment.seq, fragment.bytes);
+			sendingFragment = fragment;
+		}
 		return SUCCESS;
 	}
 

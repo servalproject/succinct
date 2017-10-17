@@ -13,8 +13,8 @@
     <string name="nav_rock">Iridium Connection</string>
     <string name="rock_disconnect">Disconnect</string>
     <string name="rock_unlock">Enter PIN (1234)</string>
-    <string name="rock_send">Send Message (Hello)</string>
-    <string name="rock_send_raw">Send Raw (Hello)</string>
+    <string name="rock_send">Send Message</string>
+    <string name="rock_send_raw">Send Raw</string>
     <string name="rock_enable">Enable</string>
     <string name="team_status_default">Not currently in a team</string>
     <string name="team_status_in_team">Member of team %1$s</string>

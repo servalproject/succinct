@@ -20,17 +20,31 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"/>
 
-    <Button
-        android:id="@+id/enable"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/rock_enable"/>
+        android:orientation="horizontal">
 
-    <Button
-        android:id="@+id/scan"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/rock_scan"/>
+        <Button
+            android:id="@+id/enable"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/rock_enable"/>
+
+        <Button
+            android:id="@+id/scan"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/rock_scan"/>
+
+        <Button
+            android:id="@+id/disconnect"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/rock_disconnect"/>
+
+
+    </LinearLayout>
 
     <Button
         android:id="@+id/unlock"
@@ -39,28 +53,29 @@
         android:text="@string/rock_unlock"/>
 
     <Button
-        android:id="@+id/disconnect"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/rock_disconnect"/>
-
-    <Button
         android:id="@+id/beep"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@string/rock_beep"/>
 
-    <Button
-        android:id="@+id/send"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="@string/rock_send"/>
+        android:orientation="horizontal">
 
-    <Button
-        android:id="@+id/send_raw"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/rock_send_raw"/>
+        <Button
+            android:id="@+id/send"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/rock_send"/>
+
+        <Button
+            android:id="@+id/send_raw"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/rock_send_raw"/>
+
+    </LinearLayout>
 
     <android.support.v7.widget.RecyclerView
         android:layout_width="match_parent"
