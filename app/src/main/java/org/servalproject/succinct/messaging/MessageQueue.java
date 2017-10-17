@@ -69,6 +69,9 @@ public class MessageQueue {
 	private final MappedByteBuffer fragmentBuff;
 	private long fragmentDeadline;
 
+	private boolean closed = false;
+	private boolean monitoringActive = false;
+
 	public MessageQueue(App appContext, TeamStorage store) throws IOException {
 		this.app = appContext;
 		this.store = store;
@@ -149,7 +152,6 @@ public class MessageQueue {
 				}
 			}
 		};
-		memberWatcher.activate();
 
 		formWatcher = new QueueWatcher<Form>(this, app, Form.factory) {
 			@Override
@@ -225,12 +227,23 @@ public class MessageQueue {
 		fragmentBuff.putInt(0, fragmentBuff.position());
 	}
 
-	public void shutdown(){
-		// stop listening for storage changes
-		memberWatcher.deactivate();
-		formWatcher.deactivate();
-		chatWatcher.deactivate();
-		locationWatcher.deactivate();
+	private void checkMonitoring(){
+		if (monitoringActive == (!closed && store.isTeamActive()))
+			return;
+
+		monitoringActive = (!closed && store.isTeamActive());
+		if (monitoringActive){
+			memberWatcher.activate();
+			chatWatcher.activate();
+			locationWatcher.activate();
+			formWatcher.activate();
+		}else{
+			// stop listening for storage changes
+			memberWatcher.deactivate();
+			formWatcher.deactivate();
+			chatWatcher.deactivate();
+			locationWatcher.deactivate();
+		}
 	}
 
 	public void fragmentMessage(long deadline, byte messageType, byte[] messageBytes) throws IOException {
@@ -279,13 +292,13 @@ public class MessageQueue {
 		while (team.next()){
 			Serialiser serialiser = new Serialiser();
 			Team record = team.read();
-			int delay = app.getPrefs().getInt(App.MESSAGE_DELAY, 60000);
 			if (record.id == null) {
 				serialiser.putRawLong(record.epoc);
-				fragmentMessage(record.epoc+delay, DESTROY_TEAM, serialiser.getResult());
+				fragmentMessage(record.epoc, DESTROY_TEAM, serialiser.getResult());
 			}else{
 				serialiser.putRawLong(record.epoc);
 				serialiser.putString(record.name);
+				int delay = app.getPrefs().getInt(App.MESSAGE_DELAY, 60000);
 				fragmentMessage(record.epoc+delay, CREATE_TEAM, serialiser.getResult());
 			}
 			Team.factory.serialise(serialiser, record);
@@ -326,17 +339,21 @@ public class MessageQueue {
 		return sent;
 	}
 
-	private boolean hasNext() throws IOException {
+	public boolean hasUnsent() throws IOException {
 		if (fragmentBuff.position()>4)
 			return true;
 		fragments.reset("sending");
 		if (fragments.next())
 			return true;
-		members.reset("sent");
-		if (members.next())
-			return true;
 		team.reset("sent");
 		if (team.next())
+			return true;
+
+		if (!store.isTeamActive())
+			return false;
+
+		members.reset("sent");
+		if (members.next())
 			return true;
 		if (locationWatcher.hasMessage())
 			return true;
@@ -357,14 +374,17 @@ public class MessageQueue {
 		while(nextFragmentSeq <= seq){
 			if (teamState())
 				continue;
-			if (memberEnrollments())
-				continue;
-			if (locationWatcher.nextMessage())
-				continue;
-			if (chatWatcher.nextMessage())
-				continue;
-			if (formWatcher.nextMessage())
-				continue;
+
+			if (store.isTeamActive()) {
+				if (memberEnrollments())
+					continue;
+				if (locationWatcher.nextMessage())
+					continue;
+				if (chatWatcher.nextMessage())
+					continue;
+				if (formWatcher.nextMessage())
+					continue;
+			}
 
 			if (fragmentBuff.position()<=4) {
 				Log.v(TAG, "Message queue is empty");
@@ -514,7 +534,7 @@ public class MessageQueue {
 	private void sendNextFragment(){
 		try {
 			// Check if we have or can build a new fragment
-			if (!hasNext()){
+			if (!hasUnsent()){
 				// set the alarm for the next outgoing location message
 				long nextAlarm = locationWatcher.adjustAlarm(Long.MAX_VALUE);
 				if (nextAlarm != Long.MAX_VALUE)
@@ -539,15 +559,7 @@ public class MessageQueue {
 			while (true) {
 				if (!fragments.next()){
 					if (!(nextMessage(false) && fragments.next())) {
-						// tell each service they can teardown their connection now.
-						// since we have run out of fragments
-						for (int i = 0; i < services.length; i++)
-							services[i].done();
-
-						// set the alarm for the next outgoing location message
-						long nextAlarm = locationWatcher.adjustAlarm(Long.MAX_VALUE);
-						if (nextAlarm != Long.MAX_VALUE)
-							alarm.setAlarm(AlarmManager.RTC_WAKEUP, nextAlarm);
+						done();
 						break;
 					}
 				}
@@ -570,9 +582,29 @@ public class MessageQueue {
 		}
 	}
 
+	private void done() {
+		// tell each service they can teardown their connection now.
+		// since we have run out of fragments
+		for (int i = 0; i < services.length; i++)
+			services[i].done();
+
+		if (!store.isTeamActive()){
+			close();
+			return;
+		}
+
+		// set the alarm for the next outgoing location message
+		long nextAlarm = locationWatcher.adjustAlarm(Long.MAX_VALUE);
+		if (nextAlarm != Long.MAX_VALUE)
+			alarm.setAlarm(AlarmManager.RTC_WAKEUP, nextAlarm);
+	}
+
 	private final Runnable sendRunner = new Runnable() {
 		@Override
 		public void run() {
+			if (closed)
+				return;
+			checkMonitoring();
 			sendViaHttp();
 			sendNextFragment();
 		}
@@ -580,6 +612,8 @@ public class MessageQueue {
 
 	// one of our services might be ready for a new fragment
 	public void onStateChanged(){
+		if (closed)
+			return;
 		alarm.setAlarm(AlarmManager.ELAPSED_REALTIME_WAKEUP, WakeAlarm.NOW);
 	}
 
@@ -707,6 +741,16 @@ public class MessageQueue {
 			}
 			serialiser = null;
 			return message.length>0;
+		}
+	}
+
+	public void close(){
+		if (closed)
+			return;
+		closed = true;
+		checkMonitoring();
+		for (int i = 0;i<services.length;i++){
+			services[i].close();
 		}
 	}
 }

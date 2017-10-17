@@ -9,4 +9,5 @@ public interface IMessaging {
 	int checkAvailable();
 	int trySend(Fragment fragment);
 	void done();
+	void close();
 }

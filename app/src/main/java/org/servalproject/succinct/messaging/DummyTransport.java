@@ -13,6 +13,7 @@ import org.servalproject.succinct.networking.Hex;
 
 // placeholder to test messaging
 public class DummyTransport implements IMessaging{
+	private final Context context;
 	private final MessageQueue queue;
 	// use flight mode as a proxy for availability
 	private boolean airplaneMode;
@@ -29,6 +30,7 @@ public class DummyTransport implements IMessaging{
 	};
 
 	public DummyTransport(MessageQueue queue, Context context){
+		this.context = context;
 		this.queue = queue;
 		IntentFilter filter = new IntentFilter();
 		filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
@@ -81,5 +83,10 @@ public class DummyTransport implements IMessaging{
 	@Override
 	public void done() {
 		Log.v(TAG, "All done");
+	}
+
+	@Override
+	public void close() {
+		context.unregisterReceiver(receiver);
 	}
 }

@@ -41,14 +41,13 @@ import java.util.Observable;
 public class TeamFragment extends Fragment {
     private static final String TAG = "TeamFragment";
 
-    @IntDef({TEAM_STATE_EDITING_ID, TEAM_STATE_SCANNING, TEAM_STATE_JOINING, TEAM_STATE_ACTIVE})
+    @IntDef({TEAM_STATE_EDITING_ID, TEAM_STATE_SCANNING, TEAM_STATE_ACTIVE})
     @Retention(RetentionPolicy.SOURCE)
     public @interface TeamState {}
 
     private static final int TEAM_STATE_EDITING_ID = 0;
     private static final int TEAM_STATE_SCANNING = 1;
-    private static final int TEAM_STATE_JOINING = 2;
-    private static final int TEAM_STATE_ACTIVE = 3;
+    private static final int TEAM_STATE_ACTIVE = 2;
 
     private TextInputEditText editName;
     private TextInputEditText editID;
@@ -80,7 +79,7 @@ public class TeamFragment extends Fragment {
         String name = prefs.getString(App.MY_NAME, null);
         String employeeId = prefs.getString(App.MY_EMPLOYEE_ID, null);
 
-        if (app.teamStorage!=null){
+        if (app.teamStorage!=null && app.teamStorage.isTeamActive()){
             state = TEAM_STATE_ACTIVE;
         }else if (!isValidIdentity(name, employeeId)){
             state = TEAM_STATE_EDITING_ID;
@@ -153,7 +152,6 @@ public class TeamFragment extends Fragment {
                 progress = null;
                 break;
             case TEAM_STATE_SCANNING:
-            case TEAM_STATE_JOINING: // todo handle currently-joining case
                 card = view.findViewById(R.id.identity_card);
                 editButton.setOnClickListener(new View.OnClickListener() {
                     @Override
@@ -202,15 +200,18 @@ public class TeamFragment extends Fragment {
                         showTeamCreateDialog(v.getContext());
                     }
                 });
+                start.setEnabled(TeamStorage.canCreateOrJoin(app));
                 break;
             case TEAM_STATE_ACTIVE:
                 TextView status = (TextView) view.findViewById(R.id.team_status_text);
                 String myTeamName = null;
+                boolean leader = false;
                 try {
                     Team myTeam = app.teamStorage.getTeam();
-                    if (myTeam != null)
-                        myTeamName  = myTeam.name;
-                    else
+                    if (myTeam != null) {
+                        myTeamName = myTeam.name;
+                        leader = myTeam.leader.equals(app.teamStorage.peerId);
+                    } else
                         myTeamName = app.teamStorage.teamId.toString();
                 }catch (IOException e){
                     Log.e(TAG, e.getMessage(), e);
@@ -220,6 +221,21 @@ public class TeamFragment extends Fragment {
                 card.setVisibility(View.VISIBLE);
                 TextView teamName = (TextView) card.findViewById(R.id.team_name);
                 teamName.setText(myTeamName);
+
+                Button leave = (Button)card.findViewById(R.id.leave_team_button);
+                leave.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View view) {
+                        try {
+                            app.teamStorage.leave();
+                            state = TEAM_STATE_SCANNING;
+                            redraw();
+                        } catch (IOException e) {
+                            throw new IllegalStateException(e);
+                        }
+                    }
+                });
+                leave.setText(leader ? R.string.end_team : R.string.leave_team);
                 progress = null;
         }
         return view;
@@ -227,7 +243,7 @@ public class TeamFragment extends Fragment {
 
     public void onTeamSelectedChange() {
         if (state != TEAM_STATE_SCANNING || joinButton == null) return;
-        joinButton.setEnabled(teamAdapter.getSelected() != null);
+        joinButton.setEnabled(TeamStorage.canCreateOrJoin(app) && teamAdapter.getSelected() != null);
     }
 
     private final AndroidObserver teamObserver = new AndroidObserver() {
@@ -247,7 +263,7 @@ public class TeamFragment extends Fragment {
     @Override
     public void onStart() {
         super.onStart();
-        if (state == TEAM_STATE_SCANNING || state == TEAM_STATE_JOINING) {
+        if (state == TEAM_STATE_SCANNING) {
             app.networks.teams.addObserver(teamObserver);
             Collection<Team> teams = app.networks.getTeams();
             for(Team t:teams)

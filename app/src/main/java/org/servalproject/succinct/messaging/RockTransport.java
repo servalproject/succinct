@@ -24,6 +24,7 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 	private final MessageQueue messageQueue;
 	private boolean messagingRequired=false;
 	private static final String TAG = "RockTransport";
+	private boolean closed = false;
 
 	public RockTransport(MessageQueue messageQueue, Context context){
 		this.messageQueue = messageQueue;
@@ -125,6 +126,14 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 	}
 
 	@Override
+	public void close() {
+		done();
+		closed = true;
+		if (sendingMsg == null)
+			messaging.observable.deleteObserver(this);
+	}
+
+	@Override
 	public void observe(Observable observable, Object obj) {
 		boolean callback = messagingRequired;
 
@@ -153,6 +162,8 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 							sendingMsg = null;
 							sendingFragment = null;
 							messaging.enableTimeout();
+							if (closed)
+								messaging.observable.deleteObserver(this);
 							callback = true;
 						}
 						break;
@@ -182,7 +193,7 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 			}
 		}
 		
-		if (callback)
+		if (callback && !closed)
 			messageQueue.onStateChanged();
 	}
 }

@@ -30,4 +30,6 @@
     <string name="start_new_team">Start new team</string>
     <string name="allow_joining">Allow joining</string>
     <string name="identity_summary">&lt;b&gt;Name:&lt;/b&gt; %1$s&lt;br/&gt;&lt;b&gt;ID:&lt;/b&gt; %2$s</string>
+    <string name="leave_team">Leave Team</string>
+    <string name="end_team">End Team</string>
 </resources>

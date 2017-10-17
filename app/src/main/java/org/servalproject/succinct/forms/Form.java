@@ -9,6 +9,7 @@ import org.servalproject.succinct.storage.DeSerialiser;
 import org.servalproject.succinct.storage.Factory;
 import org.servalproject.succinct.storage.RecordStore;
 import org.servalproject.succinct.storage.Serialiser;
+import org.servalproject.succinct.storage.TeamStorage;
 
 import java.io.IOException;
 
@@ -43,18 +44,24 @@ public class Form {
 	private static final String TAG = "Forms";
 
 	public static void compress(Context context, String formSpecification, String completedRecord){
+		App app = (App)context.getApplicationContext();
+		TeamStorage store = app.teamStorage;
+		if (store == null || !store.isTeamActive()){
+			Log.w(TAG, "***** THROWING AWAY FORM, NOT IN AN ACTIVE TEAM *****");
+			return;
+		}
+
 		long time = System.currentTimeMillis();
 		Stats stats = Stats.getInstance(context);
 		try{
 			Recipe recipe = new Recipe(formSpecification);
 			try{
 				byte[] compressed = recipe.compress(stats, completedRecord);
-				App app = (App)context.getApplicationContext();
-				app.teamStorage.appendRecord(factory, app.networks.myId, new Form(time, compressed));
+				store.appendRecord(factory, app.networks.myId, new Form(time, compressed));
 
 				// store a copy of the form definition in a file
 				// (shouldn't matter who writes it first, the content should be the same)
-				RecordStore storeDefinition = app.teamStorage.openFile("forms/"+ Hex.toString(recipe.hash));
+				RecordStore storeDefinition = store.openFile("forms/"+ Hex.toString(recipe.hash));
 				if (storeDefinition.EOF == 0){
 					storeDefinition.appendAt(0, formSpecification.getBytes("UTF-8"));
 					storeDefinition.flush(null);

@@ -208,10 +208,24 @@
                 android:layout_height="wrap_content"
                 android:paddingBottom="16dp">
 
+                <Button
+                    android:id="@+id/leave_team_button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentEnd="true"
+                    android:layout_marginEnd="8dp"
+                    android:layout_marginTop="8dp"
+                    android:layout_marginBottom="8dp"
+                    style="?android:borderlessButtonStyle"
+                    android:text="@string/leave_team"/>
+
                 <TextView
                     android:id="@+id/team_name"
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_toStartOf="@id/leave_team_button"
+                    android:layout_alignParentStart="true"
+                    android:layout_alignBaseline="@id/leave_team_button"
                     android:textAppearance="@style/TextAppearance.AppCompat.Headline"
                     android:paddingTop="24dp"
                     android:paddingBottom="16dp"

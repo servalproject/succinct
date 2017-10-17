@@ -73,15 +73,15 @@ public class SMSTransport implements IMessaging{
 	public SMSTransport(MessageQueue queue, Context context){
 		this.appContext = (App)context.getApplicationContext();
 		this.queue = queue;
-		telephonyManager = (TelephonyManager)context.getSystemService(Context.TELEPHONY_SERVICE);
+		telephonyManager = (TelephonyManager)appContext.getSystemService(Context.TELEPHONY_SERVICE);
 		smsManager = SmsManager.getDefault();
 
 		IntentFilter filter = new IntentFilter();
 		filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
 		filter.addAction(ACTION_SENT);
-		context.registerReceiver(receiver, filter);
+		appContext.registerReceiver(receiver, filter);
 		try {
-			airplaneMode = Settings.Global.getInt(context.getContentResolver(), Settings.Global.AIRPLANE_MODE_ON) >0;
+			airplaneMode = Settings.Global.getInt(appContext.getContentResolver(), Settings.Global.AIRPLANE_MODE_ON) >0;
 			Log.v(TAG, "airplaneMode = "+airplaneMode);
 		} catch (Settings.SettingNotFoundException e) {
 			Log.e(TAG, e.getMessage(), e);
@@ -144,5 +144,11 @@ public class SMSTransport implements IMessaging{
 	@Override
 	public void done() {
 		Log.v(TAG, "All done");
+	}
+
+	@Override
+	public void close() {
+		done();
+		appContext.unregisterReceiver(receiver);
 	}
 }

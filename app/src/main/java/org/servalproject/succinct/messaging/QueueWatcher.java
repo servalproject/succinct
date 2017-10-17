@@ -24,7 +24,12 @@ abstract class QueueWatcher<T> extends StorageWatcher<T> {
 		super(App.backgroundHandler, app.teamStorage, factory);
 		this.messageQueue = messageQueue;
 		this.app = app;
-		activate();
+	}
+
+	@Override
+	public void deactivate() {
+		super.deactivate();
+		queue.clear();
 	}
 
 	boolean findNext(PeerId peer, RecordIterator<T> records) throws IOException {

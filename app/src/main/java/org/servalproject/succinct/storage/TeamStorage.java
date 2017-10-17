@@ -1,6 +1,7 @@
 package org.servalproject.succinct.storage;
 
 import android.content.SharedPreferences;
+import android.util.Log;
 
 import org.servalproject.succinct.App;
 import org.servalproject.succinct.chat.ChatDatabase;
@@ -21,6 +22,9 @@ public class TeamStorage extends Storage {
 	public final PeerId peerId;
 	private final StorageWatcher<StoredChatMessage> chatWatcher;
 	private MessageQueue messageQueue;
+	private boolean sendMessages = false;
+	private boolean teamActive = true;
+	private static final String TAG = "TeamStorage";
 
 	private TeamStorage(App app, PeerId id, PeerId peerId) {
 		super(app, id);
@@ -43,17 +47,55 @@ public class TeamStorage extends Storage {
 		@Override
 		public void run() {
 			try {
-				Team team = getTeam();
-				if (team != null && team.leader.equals(peerId))
+				if (sendMessages)
 					messageQueue = new MessageQueue(appContext, TeamStorage.this);
+				if (teamActive)
+					chatWatcher.activate();
 			}catch (IOException e){
 				throw new IllegalStateException(e);
 			}
-			chatWatcher.activate();
 		}
 	};
 
+	public boolean isTeamActive(){
+		return teamActive;
+	}
+
+	public boolean isMembershipUpToDate() throws IOException {
+		TeamMember me = getMyself();
+		MembershipList list = getMembers();
+
+		return list.getPosition(peerId)>0
+				&& (me.name != null || !list.isActive(peerId));
+	}
+
+	public boolean messagesPending() throws IOException {
+		if (messageQueue==null)
+			return false;
+		return messageQueue.hasUnsent();
+	}
+
+	public static boolean canCreateOrJoin(App appContext) {
+		try {
+			TeamStorage store = appContext.teamStorage;
+			if (store == null)
+				return true;
+			if (store.messagesPending())
+				return false;
+			// TODO do we add a timer or something?
+			/*if (!store.isMembershipUpToDate())
+				return false;
+			*/
+			return !store.isTeamActive();
+		}catch (Exception e) {
+			Log.e(TAG, e.getMessage(), e);
+			return false;
+		}
+	}
+
 	public static void createTeam(App appContext, String teamName, PeerId peerId) throws IOException {
+		if (!canCreateOrJoin(appContext))
+			throw new IllegalStateException();
 		if (appContext.teamStorage!=null) {
 			appContext.teamStorage.close();
 			appContext.teamStorage = null;
@@ -70,16 +112,19 @@ public class TeamStorage extends Storage {
 		storage.appendRecord(TeamMember.factory, peerId, me);
 		storage.myself = me;
 		storage.myTeam = team;
+		storage.sendMessages = true;
 
 		SharedPreferences.Editor ed = prefs.edit();
 		ed.putString(App.TEAM_ID, teamId.toString());
 		ed.apply();
 
-		App.backgroundHandler.post(storage.postInit);
 		appContext.teamStorage = storage;
+		App.backgroundHandler.post(storage.postInit);
 	}
 
 	public static void joinTeam(App appContext, Team team, PeerId peerId) throws IOException {
+		if (!canCreateOrJoin(appContext))
+			throw new IllegalStateException();
 		if (appContext.teamStorage!=null) {
 			appContext.teamStorage.close();
 			appContext.teamStorage = null;
@@ -99,12 +144,41 @@ public class TeamStorage extends Storage {
 		ed.apply();
 
 		appContext.teamStorage = storage;
+		App.backgroundHandler.post(storage.postInit);
 	}
 
-	public static void reloadTeam(App appContext, PeerId teamId, PeerId peerId){
+	public static void reloadTeam(App appContext, PeerId teamId, PeerId peerId) throws IOException {
+		if (appContext.teamStorage != null)
+			throw new IllegalStateException();
+
 		TeamStorage storage = new TeamStorage(appContext, teamId, peerId);
-		App.backgroundHandler.post(storage.postInit);
+
+		RecordIterator<Team> iterator = storage.openIterator(Team.factory, teamId);
+		iterator.end();
+		while(iterator.prev()){
+			Team team = iterator.read();
+			// set myTeam to the last record
+			if (storage.myTeam == null)
+				storage.myTeam = team;
+			// check if we are / were the team leader
+			if (peerId.equals(team.leader))
+				storage.sendMessages = true;
+
+			if (team.leader==null)
+				storage.teamActive = false;
+			else
+				// stop when we hit a team create record
+				break;
+		}
+
+		TeamMember me = storage.getMyself();
+		if (me!=null && me.name == null){
+			// We have left this team
+			storage.teamActive = false;
+		}
+
 		appContext.teamStorage = storage;
+		App.backgroundHandler.post(storage.postInit);
 	}
 
 	private TeamMember myself;
@@ -132,25 +206,26 @@ public class TeamStorage extends Storage {
 	public void close() throws IOException {
 		// About to join a new team, really stop tracking this one.
 		if (messageQueue!=null)
-			messageQueue.shutdown();
+			messageQueue.close();
 		super.close();
 	}
 
 	public void leave() throws IOException {
 		// Record that we are leaving / shutting down the team
 		// But keep syncing and sending message fragments
+		teamActive = false;
 		Team team = getTeam();
 		if (team!=null && team.leader.equals(peerId)){
 			// close the whole team
 			myTeam = new Team(System.currentTimeMillis());
 			appendRecord(Team.factory, teamId, myTeam);
-			if (messageQueue!=null)
-				messageQueue.onStateChanged();
 		} else {
 			// just remove myself
 			myself = new TeamMember();
 			appendRecord(TeamMember.factory, peerId, myself);
 		}
+		if (messageQueue!=null)
+			messageQueue.onStateChanged();
 		chatWatcher.deactivate();
 	}
 

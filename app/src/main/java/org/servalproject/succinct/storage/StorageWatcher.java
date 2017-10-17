@@ -12,6 +12,7 @@ import java.util.Observable;
 public abstract class StorageWatcher<T> extends AndroidObserver{
 	protected final TeamStorage store;
 	private final Factory<T> factory;
+	private boolean active = false;
 	private static final String TAG = "StorageWatcher";
 
 	public StorageWatcher(Handler handler, TeamStorage store, Factory<T> factory){
@@ -26,6 +27,9 @@ public abstract class StorageWatcher<T> extends AndroidObserver{
 	}
 
 	public void activate(){
+		if (active)
+			return;
+		active = true;
 		store.observable.addObserver(this);
 		for(PeerId peer : store.getDevices()){
 			try {
@@ -37,7 +41,14 @@ public abstract class StorageWatcher<T> extends AndroidObserver{
 		}
 	}
 
+	public boolean isActive(){
+		return active;
+	}
+
 	public void deactivate(){
+		if (!active)
+			return;
+		active = false;
 		store.observable.deleteObserver(this);
 	}
 
