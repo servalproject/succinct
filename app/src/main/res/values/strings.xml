@@ -35,4 +35,5 @@
     <string name="pref_server_location">Server Location</string>
     <string name="pref_sms_destination">Server SMS Number</string>
     <string name="pref_paired_rock">Pair Iridium Tracker</string>
+    <string name="pref_location_interval">Location update frequency</string>
 </resources>

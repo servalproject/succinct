@@ -706,7 +706,7 @@ public class MessageQueue {
 			records.end();
 			if (!records.prev())
 				return false;
-			int delay = app.getPrefs().getInt(App.LOCATION_INTERVAL, 300000);
+			long delay = app.getPrefs().getLong(App.LOCATION_INTERVAL, App.DefaultLocationInterval);
 			if (System.currentTimeMillis() - nextLocationMessage > delay) {
 				Log.v(TAG, "First location update, forcing message in 1s");
 				nextLocationMessage = System.currentTimeMillis() + 1000;
@@ -745,7 +745,7 @@ public class MessageQueue {
 			byte[] message = serialiser.getResult();
 			if (message.length>0) {
 				fragmentMessage(now, LOCATION, message);
-				int delay = app.getPrefs().getInt(App.LOCATION_INTERVAL, 300000);
+				long delay = app.getPrefs().getLong(App.LOCATION_INTERVAL, App.DefaultLocationInterval);
 				nextLocationMessage = now + delay;
 			}
 			serialiser = null;

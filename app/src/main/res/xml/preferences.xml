@@ -12,5 +12,8 @@
         android:key="sms_destination"
         android:title="@string/pref_sms_destination"
         />
+    <org.servalproject.succinct.utils.IntervalPreference
+        android:key="location_interval"
+        android:title="@string/pref_location_interval"/>
 
 </PreferenceScreen>

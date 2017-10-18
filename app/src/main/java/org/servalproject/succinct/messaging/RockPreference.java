@@ -31,7 +31,7 @@ import java.util.Observable;
 import uk.rock7.connect.enums.R7LockState;
 
 public class RockPreference extends DialogPreference {
-	private RockMessaging rock;
+	private final RockMessaging rock;
 	private RecyclerView deviceList;
 	private TextView status;
 	private Button positive;
@@ -39,17 +39,12 @@ public class RockPreference extends DialogPreference {
 	private static final String TAG = "RockPreference";
 
 	public RockPreference(Context context, AttributeSet attrs) {
-		super(context, attrs);
-		init();
+		this(context, attrs, android.R.attr.dialogPreferenceStyle);
 	}
 
 	@TargetApi(Build.VERSION_CODES.LOLLIPOP)
-	public RockPreference(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
-		super(context, attrs, defStyleAttr, defStyleRes);
-		init();
-	}
-
-	private void init(){
+	public RockPreference(Context context, AttributeSet attrs, int defStyleAttr) {
+		super(context, attrs, defStyleAttr);
 		App app = (App)getContext().getApplicationContext();
 		rock = app.getRock();
 		setDialogLayoutResource(R.layout.settings_rock);
@@ -85,6 +80,11 @@ public class RockPreference extends DialogPreference {
 				getContext(), LinearLayoutManager.VERTICAL, false));
 
 		rock.observable.addObserver(rockObserver);
+	}
+
+	@Override
+	public CharSequence getSummary() {
+		return getPersistedString(null);
 	}
 
 	@Override
