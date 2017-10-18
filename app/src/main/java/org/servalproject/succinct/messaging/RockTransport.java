@@ -7,7 +7,6 @@ import android.preference.PreferenceManager;
 import android.util.Log;
 
 import org.servalproject.succinct.App;
-import org.servalproject.succinct.messaging.rock.Device;
 import org.servalproject.succinct.messaging.rock.RockMessage;
 import org.servalproject.succinct.messaging.rock.RockMessaging;
 import org.servalproject.succinct.networking.Hex;
@@ -177,22 +176,7 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 				}
 			}
 		}
-		if (messaging.getLockState() == R7LockState.R7LockStateUnlocked && messaging.canSendRawMessage()){
-			Device connected = messaging.getConnectedDevice();
-			if (connected != null){
-				// TODO settings dialog to ask the user explicitly to use this device
-				String deviceId = prefs.getString(App.PAIRED_ROCK, null);
-				if (deviceId == null) {
-					Log.v(TAG, "Remembering connection to "+connected.id+" for automatic messaging");
-					deviceId = connected.id;
-					SharedPreferences.Editor ed = prefs.edit();
-					ed.putString(App.PAIRED_ROCK, deviceId);
-					ed.apply();
-					callback = true;
-				}
-			}
-		}
-		
+
 		if (callback && !closed)
 			messageQueue.onStateChanged();
 	}

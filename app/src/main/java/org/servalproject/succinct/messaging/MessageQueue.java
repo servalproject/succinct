@@ -3,6 +3,7 @@ package org.servalproject.succinct.messaging;
 
 import android.app.AlarmManager;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.location.Location;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -72,9 +73,17 @@ public class MessageQueue {
 	private boolean closed = false;
 	private boolean monitoringActive = false;
 
+	private final SharedPreferences.OnSharedPreferenceChangeListener prefsChanged = new SharedPreferences.OnSharedPreferenceChangeListener() {
+		@Override
+		public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String s) {
+			onStateChanged();
+		}
+	};
+
 	public MessageQueue(App appContext, TeamStorage store) throws IOException {
 		this.app = appContext;
 		this.store = store;
+		app.getPrefs().registerOnSharedPreferenceChangeListener(prefsChanged);
 		connectivityManager = (ConnectivityManager)appContext.getSystemService(Context.CONNECTIVITY_SERVICE);
 		members = store.openIterator(Membership.factory, store.teamId);
 		team = store.openIterator(Team.factory, store.teamId);
@@ -748,6 +757,7 @@ public class MessageQueue {
 		if (closed)
 			return;
 		closed = true;
+		app.getPrefs().unregisterOnSharedPreferenceChangeListener(prefsChanged);
 		checkMonitoring();
 		for (int i = 0;i<services.length;i++){
 			services[i].close();

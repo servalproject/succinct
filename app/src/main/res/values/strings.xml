@@ -32,4 +32,7 @@
     <string name="identity_summary">&lt;b&gt;Name:&lt;/b&gt; %1$s&lt;br/&gt;&lt;b&gt;ID:&lt;/b&gt; %2$s</string>
     <string name="leave_team">Leave Team</string>
     <string name="end_team">End Team</string>
+    <string name="pref_server_location">Server Location</string>
+    <string name="pref_sms_destination">Server SMS Number</string>
+    <string name="pref_paired_rock">Pair Iridium Tracker</string>
 </resources>

@@ -144,7 +144,6 @@ public class RockMessaging {
 		Log.v(TAG, action);
 		lastAction = action;
 		lastError = null;
-		observable.notifyObservers();
 	}
 
 	public R7DeviceError getLastError(){
@@ -187,9 +186,8 @@ public class RockMessaging {
 	}
 
 	public void enable(){
-		setLastAction("Enabling");
-
 		if (comms == null){
+			setLastAction("Enabling");
 			init();
 		}else{
 			adapter.enable();
@@ -226,7 +224,7 @@ public class RockMessaging {
 			return null;
 		if (devices.containsKey(deviceId))
 			return devices.get(deviceId);
-		Device d = new Device(deviceId, null);
+		Device d = new Device(deviceId, deviceId);
 		devices.put(deviceId, d);
 		return d;
 	}
