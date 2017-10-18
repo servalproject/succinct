@@ -40,6 +40,7 @@ public class MapLocationLayer extends Layer {
     private boolean waitingToCenter = false;
     private boolean alwaysCenter = false;
     private boolean haveDisplayModel = false;
+    private App app;
     private Context context;
     private MarkerLocation myLocation;
     private HashMap<PeerId, MarkerLocation> markers = new HashMap<>();
@@ -83,9 +84,8 @@ public class MapLocationLayer extends Layer {
         if (myLocation!=null) {
             mapViewPosition.setCenter(myLocation.latLong);
             waitingToCenter = false;
-            if (haveDisplayModel) {
+            if (haveDisplayModel)
                 requestRedraw();
-            }
         }
         else {
             waitingToCenter = true;
@@ -105,23 +105,19 @@ public class MapLocationLayer extends Layer {
      */
     public void activate(Context context) {
         Log.d(TAG, "activate");
-        if (locationWatcher == null){
-            final App app = (App)context.getApplicationContext();
+        this.context = context;
+        app = (App)context.getApplicationContext();
+        if (locationWatcher == null && app.teamStorage!=null){
             locationWatcher = new StorageWatcher<Location>(app.teamStorage, LocationFactory.factory) {
                 @Override
                 protected void Visit(PeerId peer, RecordIterator<Location> records) throws IOException {
+                    if (app.networks.myId.equals(peer))
+                        return;
                     // We only need the last location for each peer
                     Location last = records.readLast();
                     if (last!=null) {
                         MarkerLocation l = new MarkerLocation(peer, last);
                         markers.put(peer, l);
-                        if (app.networks.myId.equals(peer)){
-                            myLocation = l;
-                            if (waitingToCenter || alwaysCenter){
-                                mapViewPosition.setCenter(l.latLong);
-                                waitingToCenter = false;
-                            }
-                        }
                         if (haveDisplayModel)
                             requestRedraw();
                     }
@@ -129,9 +125,9 @@ public class MapLocationLayer extends Layer {
             };
         }
         markers.clear();
-        locationWatcher.activate();
-
-        this.context = context;
+        locationBroadcastReceiver.register(context);
+        if (locationWatcher!=null)
+            locationWatcher.activate();
     }
 
     /**
@@ -139,10 +135,35 @@ public class MapLocationLayer extends Layer {
      */
     public void deactivate() {
         Log.d(TAG, "deactivate");
-        locationWatcher.deactivate();
+        locationBroadcastReceiver.unregister(context);
+        if (locationWatcher!=null)
+            locationWatcher.deactivate();
         markers.clear();
     }
 
+    private final LocationService.LocationBroadcastReceiver locationBroadcastReceiver = new LocationService.LocationBroadcastReceiver() {
+        @Override
+        public void onDisabled() {
+
+        }
+
+        @Override
+        public void onEnabled() {
+
+        }
+
+        @Override
+        public void onNewLocation(Location location) {
+            markers.put(app.networks.myId,
+                    (myLocation = new MarkerLocation(app.networks.myId, location)));
+            if (waitingToCenter || alwaysCenter){
+                mapViewPosition.setCenter(myLocation.latLong);
+                waitingToCenter = false;
+            }
+            if (haveDisplayModel)
+                requestRedraw();
+        }
+    };
     /**
      * Add Layer to a map with map.getLayerManager().getLayers()
      * Always use this instead of directly using {@link Layers#add(Layer)}
