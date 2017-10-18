@@ -61,7 +61,7 @@ public class App extends Application {
 	public static final String MESSAGE_DELAY = "message_delay";
 	// minimum delay before sending a location update
 	public static final String LOCATION_INTERVAL = "location_interval";
-	public static final long DefaultLocationInterval = 300000;
+	public static final long DefaultLocationInterval = 15*60*1000;
 
 	private PeerId fromPreference(SharedPreferences prefs, String pref){
 		String id = prefs.getString(pref, null);
