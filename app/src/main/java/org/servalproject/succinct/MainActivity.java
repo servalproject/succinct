@@ -63,6 +63,7 @@ public class MainActivity extends AppCompatActivity
     private LocationService locationService;
     private boolean locationServiceBound;
 
+    private App app;
     private View navHeader;
 
     public enum PermissionState {
@@ -82,6 +83,8 @@ public class MainActivity extends AppCompatActivity
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        this.app = (App)getApplicationContext();
+
         setContentView(R.layout.activity_main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -180,8 +183,6 @@ public class MainActivity extends AppCompatActivity
         if (id == selectedFragment)
             return true;
 
-        selectedFragment = id;
-
         Fragment newFragment = null;
         switch (id){
             case R.id.nav_team:
@@ -193,6 +194,8 @@ public class MainActivity extends AppCompatActivity
                 break;
 
             case R.id.nav_chat:
+                if (app.teamStorage == null)
+                    return true;
                 newFragment = new ChatFragment();
                 break;
 
@@ -206,15 +209,15 @@ public class MainActivity extends AppCompatActivity
         }
 
         if (newFragment != null) {
+            selectedFragment = id;
             FragmentTransaction transaction = getFragmentManager().beginTransaction();
             transaction.replace(R.id.main_frame, newFragment, "CURRENT");
             // transaction.addToBackStack(null);
             transaction.commit();
             toolbar.setTitle(newTitle);
+            DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
+            drawer.closeDrawer(GravityCompat.START);
         }
-
-        DrawerLayout drawer = (DrawerLayout) findViewById(R.id.drawer_layout);
-        drawer.closeDrawer(GravityCompat.START);
         return true;
     }
 
