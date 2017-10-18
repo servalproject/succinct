@@ -2,6 +2,7 @@ package org.servalproject.succinct.messaging;
 
 import android.annotation.TargetApi;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.os.Build;
 import android.os.Bundle;
 import android.preference.DialogPreference;
@@ -91,10 +92,28 @@ public class RockPreference extends DialogPreference {
 	protected void onDialogClosed(boolean positiveResult) {
 		super.onDialogClosed(positiveResult);
 		rock.observable.deleteObserver(rockObserver);
-		if (positiveResult && selected!=null) {
-			Log.v(TAG, "Remembering connection to "+selected.id+" for automatic messaging");
-			persistString(selected.id);
+	}
+
+	@Override
+	protected void onPrepareDialogBuilder(AlertDialog.Builder builder) {
+		super.onPrepareDialogBuilder(builder);
+		builder.setNeutralButton(R.string.pref_rock_unpair, this);
+	}
+
+	@Override
+	public void onClick(DialogInterface dialog, int which) {
+		switch (which){
+			case DialogInterface.BUTTON_NEUTRAL:
+				Log.v(TAG, "Unpairing");
+				persistString(null);
+				break;
+			case DialogInterface.BUTTON_POSITIVE:
+				Log.v(TAG, "Remembering connection to " + selected.id + " for automatic messaging");
+				persistString(selected.id);
+				break;
 		}
+		setSummary(getSummary());
+		super.onClick(dialog, which);
 	}
 
 	// TODO string resources
@@ -117,9 +136,9 @@ public class RockPreference extends DialogPreference {
 			rock.enable();
 			return false;
 		}
+		rock.checkState();
+		Device connected = rock.getConnectedDevice();
 		if (selected != null){
-			rock.checkState();
-			Device connected = rock.getConnectedDevice();
 			if (connected == null){
 				if (rock.canConnect()) {
 					lastStatus = "Connecting to "+selected.getName();
@@ -149,9 +168,11 @@ public class RockPreference extends DialogPreference {
 			}
 			lastStatus = "Connected";
 			return rock.canSendRawMessage();
-		}else {
-			if (rock.isConnected())
+		} else {
+			if (rock.isConnected()) {
+				lastStatus = "Connected";
 				return false;
+			}
 			if (!rock.isScanning())
 				rock.scan();
 			lastStatus = "Scanning";

@@ -37,6 +37,7 @@ public class IntervalPreference extends DialogPreference {
 
 	@Override
 	protected View onCreateDialogView() {
+		// TODO use number pickers directly
 		picker = new TimePicker(getContext());
 		picker.setIs24HourView(true);
 		return picker;
