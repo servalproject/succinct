@@ -202,10 +202,6 @@ public class MainActivity extends AppCompatActivity
             case R.id.nav_settings:
                 newFragment = new SettingsFragment();
                 break;
-
-            case R.id.nav_rock:
-                newFragment = new RockFragment();
-                break;
         }
 
         if (newFragment != null) {
