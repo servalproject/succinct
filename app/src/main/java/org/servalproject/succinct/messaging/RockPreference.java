@@ -51,6 +51,7 @@ public class RockPreference extends DialogPreference {
 		setDialogLayoutResource(R.layout.settings_rock);
 		setPositiveButtonText(R.string.ok);
 		setNegativeButtonText(R.string.cancel);
+		setSummary(getPersistedString(null));
 	}
 
 	private List<Device> rockDevices = new ArrayList<>();
@@ -84,14 +85,10 @@ public class RockPreference extends DialogPreference {
 	}
 
 	@Override
-	public CharSequence getSummary() {
-		return getPersistedString(null);
-	}
-
-	@Override
 	protected void onDialogClosed(boolean positiveResult) {
 		super.onDialogClosed(positiveResult);
 		rock.observable.deleteObserver(rockObserver);
+		setSummary(getPersistedString(null));
 	}
 
 	@Override
@@ -112,7 +109,6 @@ public class RockPreference extends DialogPreference {
 				persistString(selected.id);
 				break;
 		}
-		setSummary(getSummary());
 		super.onClick(dialog, which);
 	}
 

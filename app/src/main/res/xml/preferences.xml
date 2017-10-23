@@ -1,17 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+    <CheckBoxPreference
+        android:key="enable_rock"
+        android:title="@string/pref_enable_rock"
+        />
     <org.servalproject.succinct.messaging.RockPreference
         android:key="paired_rock"
         android:title="@string/pref_paired_rock"
+        />
+    <CheckBoxPreference
+        android:key="enable_sms"
+        android:title="@string/pref_enable_sms"
+        />
+    <EditTextPreference
+        android:key="sms_destination"
+        android:title="@string/pref_sms_destination"
+        />
+    <CheckBoxPreference
+        android:key="enable_http"
+        android:title="@string/pref_enable_http"
         />
     <EditTextPreference
         android:key="base_server_url"
         android:title="@string/pref_server_location"
     />
-    <EditTextPreference
-        android:key="sms_destination"
-        android:title="@string/pref_sms_destination"
-        />
     <org.servalproject.succinct.utils.IntervalPreference
         android:key="location_interval"
         android:title="@string/pref_location_interval"/>

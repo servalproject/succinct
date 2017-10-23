@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.provider.Settings;
 import android.support.v4.app.ActivityCompat;
@@ -89,7 +90,10 @@ public class SMSTransport implements IMessaging{
 	}
 
 	public int checkAvailable(){
-		String destinationNumber = appContext.getPrefs().getString(App.SMS_DESTINATION, BuildConfig.smsDestination);
+		SharedPreferences prefs = appContext.getPrefs();
+		if (!prefs.getBoolean(App.ENABLE_SMS, true))
+			return UNAVAILABLE;
+		String destinationNumber = prefs.getString(App.SMS_DESTINATION, BuildConfig.smsDestination);
 		if (destinationNumber == null || "".equals(destinationNumber))
 			return UNAVAILABLE;
 

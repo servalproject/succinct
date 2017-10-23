@@ -37,4 +37,7 @@
     <string name="pref_paired_rock">Pair Iridium Tracker</string>
     <string name="pref_location_interval">Location update frequency</string>
     <string name="pref_rock_unpair">Unpair</string>
+    <string name="pref_enable_rock">Send via Iridium</string>
+    <string name="pref_enable_http">Send via HTTP</string>
+    <string name="pref_enable_sms">Send via SMS</string>
 </resources>

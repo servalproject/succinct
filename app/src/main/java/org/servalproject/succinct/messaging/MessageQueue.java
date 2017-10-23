@@ -462,10 +462,10 @@ public class MessageQueue {
 		throw new IllegalStateException("Seq "+seq+" not found!");
 	}
 
-	private String read(InputStream stream) throws IOException {
+	private String readString(URLConnection connection) throws IOException {
 		final char[] buffer = new char[512];
 		final StringBuilder out = new StringBuilder();
-		Reader in = new InputStreamReader(stream, "UTF-8");
+		Reader in = new InputStreamReader(connection.getInputStream(), "UTF-8");
 		while(true) {
 			int rsz = in.read(buffer, 0, buffer.length);
 			if (rsz < 0)
@@ -476,14 +476,23 @@ public class MessageQueue {
 		return out.toString();
 	}
 
-	private void sendViaHttp(){
+	private String getBaseUrl(){
+		if (!app.getPrefs().getBoolean(App.ENABLE_HTTP, true))
+			return null;
 		String baseUrl = app.getPrefs().getString(App.BASE_SERVER_URL,
 				BuildConfig.directApiUrl);
 		if (baseUrl == null || "".equals(baseUrl))
-			return;
+			return null;
 
 		NetworkInfo network = connectivityManager.getActiveNetworkInfo();
 		if (network == null || !network.isConnected())
+			return null;
+		return baseUrl;
+	}
+
+	private void sendViaHttp(){
+		String baseUrl = getBaseUrl();
+		if (baseUrl == null)
 			return;
 
 		try {
@@ -492,17 +501,22 @@ public class MessageQueue {
 			if (fragments.next()){
 				// double check the latest ack sequence with the server
 				URL url = new URL(baseUrl+"/succinct/api/v1/ack/"+store.teamId+"?key="+BuildConfig.directApiKey);
+				Log.v(TAG, "Connecting to "+url);
 				HttpURLConnection connection = (HttpURLConnection)url.openConnection();
-				connection.setRequestProperty("Connection", "keep-alive");
-				connection.connect();
-				int response = connection.getResponseCode();
-				if (response == 404){
-					markAck(-1);
-				}else if (response == 200){
-					markAck(Integer.parseInt(read((InputStream)connection.getContent())));
-				}else{
-					Log.e(TAG, "Unexpected http response code "+response);
-					return;
+				try {
+					connection.setRequestProperty("Connection", "keep-alive");
+					connection.connect();
+					int response = connection.getResponseCode();
+					if (response == 404) {
+						markAck(-1);
+					} else if (response == 200) {
+						markAck(Integer.parseInt(readString(connection)));
+					} else {
+						Log.e(TAG, "Unexpected http response code " + response);
+						return;
+					}
+				} finally {
+					connection.disconnect();
 				}
 			}
 
@@ -512,29 +526,35 @@ public class MessageQueue {
 					// If we reach the end of the fragment list, we can avoid other transports
 					fragments.mark("sending");
 					if (!(nextMessage(true) && fragments.next())) {
-						return;
+						break;
 					}
 					continue;
 				}
 
 				URL url = new URL(baseUrl+"/succinct/api/v1/uploadFragment/"+store.teamId+"?key="+BuildConfig.directApiKey);
+				Log.v(TAG, "Connecting to "+url);
 				HttpURLConnection connection = (HttpURLConnection)url.openConnection();
-				connection.setRequestMethod("POST");
-				connection.setRequestProperty("Connection", "keep-alive");
-				connection.setRequestProperty("Content-Type", "application/octet-stream");
-				connection.setFixedLengthStreamingMode(sendFragment.bytes.length);
-				connection.connect();
-				OutputStream out = connection.getOutputStream();
-				out.write(sendFragment.bytes);
-				out.close();
-				int response = connection.getResponseCode();
-				if (response!=200){
-					Log.e(TAG, "Unexpected http response code "+response);
-					return;
-				}
+				try {
+					connection.setRequestMethod("POST");
+					connection.setRequestProperty("Connection", "keep-alive");
+					connection.setRequestProperty("Content-Type", "application/octet-stream");
+					connection.setFixedLengthStreamingMode(sendFragment.bytes.length);
+					connection.connect();
+					OutputStream out = connection.getOutputStream();
+					out.write(sendFragment.bytes);
+					out.close();
+					int response = connection.getResponseCode();
+					if (response != 200) {
+						Log.e(TAG, "Unexpected http response code " + response);
+						return;
+					}
 
-				markAck(Integer.parseInt(read((InputStream)connection.getContent())));
+					markAck(Integer.parseInt(readString(connection)));
+				}finally{
+					connection.disconnect();
+				}
 			}
+
 		} catch (IOException e) {
 			Log.e(TAG, e.getMessage(), e);
 		}

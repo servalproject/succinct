@@ -43,6 +43,8 @@ public class RockTransport extends AndroidObserver implements IMessaging{
 	}
 
 	public int checkAvailable(){
+		if (!prefs.getBoolean(App.ENABLE_ROCK, true))
+			return UNAVAILABLE;
 		String deviceId = prefs.getString(App.PAIRED_ROCK, null);
 		if (deviceId==null)
 			return UNAVAILABLE;

@@ -3,6 +3,7 @@ package org.servalproject.succinct;
 
 import android.content.SharedPreferences;
 import android.os.Bundle;
+import android.preference.CheckBoxPreference;
 import android.preference.EditTextPreference;
 import android.preference.PreferenceFragment;
 
@@ -17,6 +18,12 @@ public class SettingsFragment extends PreferenceFragment implements SharedPrefer
         EditTextPreference editor = (EditTextPreference) findPreference(prefName);
         editor.setText(value);
         editor.setSummary(value);
+    }
+
+    private void setCheckbox(SharedPreferences prefs, String prefName, boolean defaultValue){
+        boolean value = prefs.getBoolean(prefName, defaultValue);
+        CheckBoxPreference preference = (CheckBoxPreference) findPreference(prefName);
+        preference.setChecked(value);
     }
 
     @Override
@@ -47,5 +54,8 @@ public class SettingsFragment extends PreferenceFragment implements SharedPrefer
     public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String s) {
         setEditText(prefs, App.BASE_SERVER_URL, BuildConfig.directApiUrl);
         setEditText(prefs, App.SMS_DESTINATION, BuildConfig.smsDestination);
+        setCheckbox(prefs, App.ENABLE_ROCK, true);
+        setCheckbox(prefs, App.ENABLE_SMS, true);
+        setCheckbox(prefs, App.ENABLE_HTTP, true);
     }
 }

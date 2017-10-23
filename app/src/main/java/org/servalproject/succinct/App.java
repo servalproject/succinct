@@ -54,6 +54,10 @@ public class App extends Application {
 	public static final String SMS_DESTINATION = "sms_destination";
 	public static final String BASE_SERVER_URL = "base_server_url";
 
+	public static final String ENABLE_ROCK = "enable_rock";
+	public static final String ENABLE_SMS = "enable_sms";
+	public static final String ENABLE_HTTP = "enable_http";
+
 	// Maximum delay (in ms) before flushing message fragments;
 	// to send a form
 	public static final String FORM_DELAY = "form_delay";
