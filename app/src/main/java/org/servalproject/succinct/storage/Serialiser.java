@@ -107,7 +107,7 @@ public class Serialiser {
 	public byte[] getResult(){
 		buff.flip();
 		if (!buff.hasRemaining())
-			return null;
+			return new byte[0];
 		byte[] ret = new byte[buff.remaining()];
 		buff.get(ret);
 		buff.clear();
