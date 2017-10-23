@@ -377,8 +377,8 @@ public class MessageQueue {
 			serialiser.putByte((byte) pos);
 			serialiser.putTime(m.time, store.getTeam().epoc);
 			if (m.enroll) {
-				serialiser.putString(member.employeeId);
 				serialiser.putString(member.name);
+				serialiser.putString(member.employeeId);
 
 				fragmentMessage(m.time, ENROLL, serialiser.getResult());
 			}else{
