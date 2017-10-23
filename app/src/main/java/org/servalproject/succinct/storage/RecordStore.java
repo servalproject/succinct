@@ -5,17 +5,17 @@ import android.util.Log;
 import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.utils.ChangedObservable;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.ProtocolException;
 import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Observable;
+import java.util.Properties;
 
 public class RecordStore {
 	public final File filename;
@@ -28,7 +28,7 @@ public class RecordStore {
 	public final Observable observable = new ChangedObservable();
 	private static final String TAG = "RecordStore";
 	private final File markFile;
-	final HashMap<String, Long> marks = new HashMap<>();
+	private final Properties properties = new Properties();
 
 	private native long open(long storePtr, String relativePath);
 	private native void append(long filePtr, byte[] bytes, int offset, int length);
@@ -44,67 +44,56 @@ public class RecordStore {
 		ptr = open(storage.ptr, relativePath);
 		if (ptr==0)
 			throw new IllegalStateException("file open failed");
-		readMarks();
+
+		readProperties();
 	}
 
-	private void readMarks() throws IOException{
+	private void readProperties() throws IOException{
 		if (!markFile.exists())
 			return;
 		if (EOF == 0) {
 			markFile.delete();
 			return;
 		}
-		BufferedReader r = new BufferedReader(new FileReader(markFile));
-		try {
-			String line;
-			while((line = r.readLine())!=null){
-				int i = line.indexOf("=");
-				if (i<0)
-					continue;
-				String name = line.substring(0,i);
-				String value = line.substring(i+1);
-				Log.v(TAG, "'"+name+"' = '"+value+"'");
-				marks.put(name, Long.parseLong(value));
-			}
-		}finally {
-			r.close();
-		}
+		properties.load(new FileInputStream(markFile));
 	}
 
-	private void flushMarks() throws IOException {
-		if (marks.isEmpty()){
-			Log.v(TAG, "Delete marks");
+	private void flushProperties() throws IOException {
+		if (EOF == 0 || properties.isEmpty()){
 			markFile.delete();
 			return;
 		}
-
-		FileWriter w = new FileWriter(markFile);
-		try {
-			for (Map.Entry<String, Long> e : marks.entrySet()) {
-				//Log.v(TAG, "writing marks; "+e.getKey() + "=" + e.getValue() );
-				w.write(e.getKey() + "=" + e.getValue() + "\n");
-			}
-		} finally {
-			w.close();
-		}
+		properties.store(new FileOutputStream(markFile), null);
 	}
 
 	void setMark(String name, long offset) throws IOException {
-		Long v = marks.get(name);
+		String value = (String)properties.get(name);
+		Long v = (value == null ? null : Long.parseLong(value, 10));
 		// Noop
 		if ((v==null && offset==0) || (v!=null && v == offset))
 			return;
 		if (offset==0){
-			marks.remove(name);
+			properties.remove(name);
 		} else {
-			marks.put(name, offset);
+			properties.put(name, Long.toString(offset, 10));
 		}
-		flushMarks();
+		flushProperties();
 	}
 
 	long getMark(String name){
-		Long v = marks.get(name);
-		return (v==null) ? 0 : v;
+		String value = (String)properties.get(name);
+		return (value == null ? 0 : Long.parseLong(value, 10));
+	}
+
+	public String getProperty(String name){
+		return (String) properties.get(name);
+	}
+
+	public void putProperty(String name, String value){
+		if (value == null)
+			properties.remove(name);
+		else
+			properties.put(name, value);
 	}
 
 	public synchronized boolean setTranfer(PeerTransfer transfer){

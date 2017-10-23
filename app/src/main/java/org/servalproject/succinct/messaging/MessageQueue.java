@@ -2,7 +2,10 @@ package org.servalproject.succinct.messaging;
 
 
 import android.app.AlarmManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.location.Location;
 import android.net.ConnectivityManager;
@@ -26,8 +29,10 @@ import org.servalproject.succinct.storage.TeamStorage;
 import org.servalproject.succinct.team.Membership;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.team.TeamMember;
+import org.servalproject.succinct.utils.SeqTracker;
 import org.servalproject.succinct.utils.WakeAlarm;
 
+import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -37,11 +42,14 @@ import java.io.RandomAccessFile;
 import java.io.Reader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.ByteBuffer;
+import java.net.URLConnection;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Date;
+import java.util.List;
+
+import static org.servalproject.succinct.messaging.Fragment.TYPE_PARTIAL;
 
 // Manage the queue of outgoing messages / fragments
 public class MessageQueue {
@@ -49,6 +57,8 @@ public class MessageQueue {
 	private final TeamStorage store;
 	private final RecordIterator<StoredChatMessage> eocMessages;
 	private final RecordIterator<Fragment> incomingFragments;
+	private final SeqTracker incomingTracker;
+	private long nextHttpCheck;
 	private final RecordIterator<Fragment> fragments;
 	private final RecordIterator<Membership> members;
 	private final RecordIterator<Team> team;
@@ -59,6 +69,7 @@ public class MessageQueue {
 	private int nextFragmentSeq;
 	private static final String TAG = "MessageQueue";
 	private final WakeAlarm alarm;
+	private final WakeAlarm httpRecvAlarm;
 
 	private final StorageWatcher<TeamMember> memberWatcher;
 	private final QueueWatcher<Form> formWatcher;
@@ -80,6 +91,16 @@ public class MessageQueue {
 		}
 	};
 
+	private final BroadcastReceiver receiver = new BroadcastReceiver() {
+		@Override
+		public void onReceive(Context context, Intent intent) {
+			String action = intent.getAction();
+			if (action.equals(ConnectivityManager.CONNECTIVITY_ACTION)){
+				httpRecvAlarm.setAlarm(AlarmManager.ELAPSED_REALTIME_WAKEUP, nextHttpCheck);
+			}
+		}
+	};
+
 	public MessageQueue(App appContext, TeamStorage store) throws IOException {
 		this.app = appContext;
 		this.store = store;
@@ -90,6 +111,14 @@ public class MessageQueue {
 		team.reset("sent");
 
 		incomingFragments = store.openIterator(Fragment.factory, PeerId.EOC);
+		incomingTracker = new SeqTracker(incomingFragments.store.getProperty("received"));
+		httpRecvAlarm = WakeAlarm.getAlarm(appContext, "HttpReceive", App.backgroundHandler, new Runnable() {
+			@Override
+			public void run() {
+				receiveHttpFragments();
+			}
+		});
+
 		eocMessages = store.openIterator(StoredChatMessage.factory, PeerId.EOC);
 
 		fragments = store.openIterator(Fragment.factory, "messaging");
@@ -97,7 +126,16 @@ public class MessageQueue {
 		if (last != null)
 			nextFragmentSeq = last.seq+1;
 
-		alarm = WakeAlarm.getAlarm(app, "Queue", App.backgroundHandler, sendRunner);
+		alarm = WakeAlarm.getAlarm(app, "Queue", App.backgroundHandler, new Runnable() {
+			@Override
+			public void run() {
+				if (closed)
+					return;
+				checkMonitoring();
+				sendViaHttp();
+				sendNextFragment();
+			}
+		});
 
 		services = new IMessaging[]{
 				new SMSTransport(this, app),
@@ -202,7 +240,11 @@ public class MessageQueue {
 
 		locationWatcher = new LocationQueueWatcher();
 
+		IntentFilter filter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
+		appContext.registerReceiver(receiver, filter);
+
 		alarm.setAlarm(AlarmManager.ELAPSED_REALTIME, WakeAlarm.NOW);
+		httpRecvAlarm.setAlarm(AlarmManager.ELAPSED_REALTIME, WakeAlarm.NOW);
 	}
 
 	private static final byte CREATE_TEAM = 0;
@@ -476,6 +518,23 @@ public class MessageQueue {
 		return out.toString();
 	}
 
+	private byte[] readBytes(URLConnection connection) throws IOException {
+		int len = connection.getContentLength();
+		if (len <=0)
+			return null;
+
+		byte[] ret = new byte[len];
+		int offset=0;
+		InputStream stream = connection.getInputStream();
+		while(offset < ret.length){
+			int r = stream.read(ret, offset, ret.length - offset);
+			if (r<0)
+				throw new EOFException();
+			offset+=r;
+		}
+		return ret;
+	}
+
 	private String getBaseUrl(){
 		if (!app.getPrefs().getBoolean(App.ENABLE_HTTP, true))
 			return null;
@@ -560,6 +619,53 @@ public class MessageQueue {
 		}
 	}
 
+	private void receiveHttpFragments() {
+		if (SystemClock.elapsedRealtime() < nextLocationMessage)
+			return;
+
+		String baseUrl = getBaseUrl();
+		if (baseUrl == null)
+			return;
+
+		try {
+			while (true) {
+				int nextSeq = incomingTracker.nextMissing();
+				URL url = new URL(baseUrl + "/succinct/api/v1/receiveFragment/" + store.teamId + "/" + nextSeq + "?key=" + BuildConfig.directApiKey);
+				Log.v(TAG, "Connecting to "+url);
+				HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+				try {
+					connection.setRequestProperty("Connection", "keep-alive");
+					connection.connect();
+					int response = connection.getResponseCode();
+					Log.v(TAG, "Status code "+response);
+					nextHttpCheck = SystemClock.elapsedRealtime() + 60000;
+					if (response == 404)
+						break;
+					if (response != 200) {
+						Log.e(TAG, "Unexpected http response " + response);
+						break;
+					}
+
+					byte[] message = readBytes(connection);
+					Fragment fragment = new Fragment(System.currentTimeMillis(), message);
+					storeFragment(fragment);
+				}finally{
+					connection.disconnect();
+				}
+			}
+			// look for incoming content every 60s, unless we run into a networking problem.
+			httpRecvAlarm.setAlarm(AlarmManager.ELAPSED_REALTIME_WAKEUP, nextHttpCheck);
+		}catch (Exception e){
+			Log.e(TAG, e.getMessage(), e);
+		}
+
+		try {
+			processFragments();
+		} catch (IOException e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
 	private void sendNextFragment(){
 		try {
 			// Check if we have or can build a new fragment
@@ -628,17 +734,6 @@ public class MessageQueue {
 			alarm.setAlarm(AlarmManager.RTC_WAKEUP, nextAlarm);
 	}
 
-	private final Runnable sendRunner = new Runnable() {
-		@Override
-		public void run() {
-			if (closed)
-				return;
-			checkMonitoring();
-			sendViaHttp();
-			sendNextFragment();
-		}
-	};
-
 	// one of our services might be ready for a new fragment
 	public void onStateChanged(){
 		if (closed)
@@ -646,43 +741,45 @@ public class MessageQueue {
 		alarm.setAlarm(AlarmManager.ELAPSED_REALTIME_WAKEUP, WakeAlarm.NOW);
 	}
 
-	public void receiveFragment(byte[] bytes) {
-		try {
-			incomingFragments.append(new Fragment(System.currentTimeMillis(), bytes));
+	private boolean storeFragment(Fragment fragment) throws IOException {
+		if (fragment.team == null)
+			return false;
 
-			Team myTeam = store.getTeam();
-			if (myTeam == null)
-				return;
+		if (!store.teamId.equals(fragment.team))
+			return false;
 
-			incomingFragments.reset("processed");
-			while(incomingFragments.next()){
-				try {
-					Fragment f = incomingFragments.read();
-					if (f.bytes.length < 16) {
-						Log.v(TAG, "Skip, incoming fragment is too short");
+		// ignore duplicate seq numbers
+		if (!incomingTracker.received(fragment.seq))
+			return false;
+
+		incomingFragments.append(fragment);
+		incomingFragments.store.putProperty("received", incomingTracker.toString());
+		return true;
+	}
+
+	private void processFragments() throws IOException {
+		Team myTeam = store.getTeam();
+		if (myTeam == null)
+			return;
+
+		incomingFragments.reset("processed");
+
+		while(incomingFragments.next()){
+			try {
+				Fragment f = incomingFragments.read();
+
+				List<Fragment.Piece> pieces = f.getPieces();
+				for(int i=0;i<pieces.size();i++){
+					Fragment.Piece piece = pieces.get(i);
+
+					// TODO fragment reassembly!
+					if (piece.type == TYPE_PARTIAL || piece.payload.remaining()!=piece.len) {
+						Log.v(TAG, "Skip, fragmented message!");
 						continue;
 					}
-					ByteBuffer b = ByteBuffer.wrap(f.bytes);
-					b.order(ByteOrder.BIG_ENDIAN);
-					PeerId teamId = new PeerId(b);
-					if (!store.teamId.equals(teamId)) {
-						Log.v(TAG, "Skip, team is not the same");
-						continue;
-					}
-					int seq = b.getInt();
-					int offset = b.get() & 0xFF;
-					if (offset!=0) {
-						Log.v(TAG, "Skip, fragmentation is not yet supported");
-						continue;
-					}
-					int msgType = b.get() & 0xFF;
-					int len = b.getShort() & 0xFFFF;
-					if (len!=b.remaining()) {
-						Log.v(TAG, "Skip, fragmentation is not yet supported");
-						continue;
-					}
-					DeSerialiser serialiser = new DeSerialiser(b);
-					switch (msgType){
+
+					DeSerialiser serialiser = new DeSerialiser(piece.payload);
+					switch (piece.type){
 						case MESSAGE:
 							int position = serialiser.getByte() & 0xFF;
 							if (position != 0) {
@@ -694,22 +791,30 @@ public class MessageQueue {
 
 							eocMessages.append(
 									new StoredChatMessage(
-									ChatDatabase.TYPE_MESSAGE,
-									new Date(time), content));
+											ChatDatabase.TYPE_MESSAGE,
+											new Date(time), content));
 							break;
 						default:
-							Log.v(TAG, "Skip, unsupported message type "+msgType);
+							Log.v(TAG, "Skip, unsupported message type "+piece.type);
 					}
-				}catch (Exception e){
-					Log.e(TAG, e.getMessage());
 				}
+			}catch (Exception e){
+				Log.e(TAG, e.getMessage());
 			}
-			incomingFragments.mark("processed");
+		}
+		incomingFragments.mark("processed");
 
+	}
+
+	public void receiveFragment(byte[] bytes) {
+		try {
+			Fragment newFragment = new Fragment(System.currentTimeMillis(), bytes);
+			storeFragment(newFragment);
+
+			processFragments();
 		} catch (IOException e) {
 			throw new IllegalStateException(e);
 		}
-
 	}
 
 	private class LocationQueueWatcher extends QueueWatcher<Location> {
