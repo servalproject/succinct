@@ -5,9 +5,11 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.location.LocationProvider;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -127,11 +129,19 @@ public class LocationService extends Service {
         try {
             gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
             // Perhaps there was a location update we missed?
-            updateLocation(locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER));
+            updateLocation(locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER), false);
             Log.d(TAG, "getLastKnownLocation (GPS) " + lastLocation);
-            Log.d(TAG, "onCreate registering for GPS updates every " + minTime + " ms, or " + minDistance + " m");
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, minTime, minDistance, locationListener);
-            locationManager.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER, minTimePassive, minDistance, locationListener);
+            for(String name:locationManager.getAllProviders()){
+                LocationProvider provider = locationManager.getProvider(name);
+                long time = (name.equals(LocationManager.PASSIVE_PROVIDER) ? minTimePassive : minTime);
+                Log.d(TAG, "register "+name+" ("
+                                +(provider.getAccuracy() == Criteria.ACCURACY_COARSE ? "coarse" : "fine")
+                                +(provider.requiresSatellite() ? ", sat":"")
+                                +(provider.requiresNetwork() ? ", network":"")
+                                +(provider.requiresCell() ? ", cell":"")
+                        +") updates every " + time + "ms, or " + minDistance + "m");
+                locationManager.requestLocationUpdates(name, time, minDistance, locationListener);
+            }
         } catch (SecurityException e) {
             Log.e(TAG, e.getMessage(), e);
             stopSelf();
@@ -148,7 +158,7 @@ public class LocationService extends Service {
         }
     }
 
-    private void updateLocation(Location newLocation){
+    private void updateLocation(Location newLocation, boolean fresh){
         if (newLocation==null)
             return;
 
@@ -156,6 +166,19 @@ public class LocationService extends Service {
         // TODO better test?
         if (newLocation.getLatitude() == 0 && newLocation.getLongitude() == 0)
             return;
+
+        if (!fresh){
+            // Filter fixes that we might have seen before
+            if (lastLocation!=null) {
+                // don't store a stale fix.
+                if (newLocation.getTime() <= lastLocation.getTime())
+                    return;
+            }
+
+            // Or one from the mysterious future (somehow??)
+            if (newLocation.getTime() > System.currentTimeMillis())
+                return;
+        }
 
         // todo logic with accuracy and timing to determine if new location should be used
         try {
@@ -175,7 +198,7 @@ public class LocationService extends Service {
         @Override
         public void onLocationChanged(Location location) {
             Log.d(TAG, "onLocationChanged " + location.toString());
-            updateLocation(location);
+            updateLocation(location, true);
         }
 
         @Override
