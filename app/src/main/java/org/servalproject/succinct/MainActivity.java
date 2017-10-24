@@ -199,6 +199,10 @@ public class MainActivity extends AppCompatActivity
                 newFragment = new ChatFragment();
                 break;
 
+            case R.id.nav_debug:
+                newFragment = new DebugFragment();
+                break;
+
             case R.id.nav_settings:
                 newFragment = new SettingsFragment();
                 break;

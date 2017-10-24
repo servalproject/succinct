@@ -40,4 +40,5 @@
     <string name="pref_enable_rock">Send via Iridium</string>
     <string name="pref_enable_http">Send via HTTP</string>
     <string name="pref_enable_sms">Send via SMS</string>
+    <string name="nav_debug">Network Debug</string>
 </resources>
