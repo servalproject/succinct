@@ -312,7 +312,6 @@ public class Networks {
 
 				// assemble a broadcast heartbeat packet
 				ByteBuffer buff = ByteBuffer.allocate(MTU);
-				Serialiser serialiser = new Serialiser(buff);
 				Header hdr = new Header(myId, false);
 				hdr.write(buff);
 
@@ -327,7 +326,7 @@ public class Networks {
 					}
 				}
 				if (!ack.links.isEmpty())
-					Ack.factory.serialise(ack);
+					ack.write(buff);
 
 				StoreState state = null;
 				if (appContext.teamStorage != null)
@@ -357,7 +356,7 @@ public class Networks {
 					hdr.write(buff);
 					ack = new Ack();
 					ack.add(p, link);
-					Ack.factory.serialise(ack);
+					ack.write(buff);
 					if (state != null)
 						state.write(buff);
 
@@ -371,8 +370,6 @@ public class Networks {
 						Log.e(TAG, e.getMessage(), e);
 					}
 				}
-
-				// TODO, send any required unicast packets to bypass packet filters
 
 				setAlarm(HEARTBEAT_MS);
 			}
