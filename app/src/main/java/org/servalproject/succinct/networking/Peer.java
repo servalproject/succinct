@@ -1,20 +1,29 @@
 package org.servalproject.succinct.networking;
 
+import android.os.SystemClock;
 import android.util.Log;
 
 import org.servalproject.succinct.App;
+import org.servalproject.succinct.networking.messages.Ack;
 import org.servalproject.succinct.networking.messages.FileBlock;
+import org.servalproject.succinct.networking.messages.Header;
+import org.servalproject.succinct.networking.messages.Message;
 import org.servalproject.succinct.networking.messages.RequestBlock;
 import org.servalproject.succinct.networking.messages.StoreState;
 import org.servalproject.succinct.networking.messages.SyncMsg;
 import org.servalproject.succinct.storage.PeerTransfer;
 import org.servalproject.succinct.storage.RecordStore;
+import org.servalproject.succinct.utils.ChangedObservable;
 
 import java.io.IOException;
+import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Observable;
 
 public class Peer {
 	public final App appContext;
@@ -24,15 +33,22 @@ public class Peer {
 	PeerConnection connection;
 	private long requested;
 	private long received;
+	private long transmitting;
+	private long transmitted;
 	private static final long maxRequest = 1024*256;
 	private List<PeerTransfer> possibleTransfers = new ArrayList<>();
 
 	private static final String TAG = "Peer";
-	public final Map<Object, PeerLink> networkLinks = new HashMap<>();
+	final Map<Object, PeerLink> networkLinks = new HashMap<>();
+	public final Observable observable = new ChangedObservable();
 
 	Peer(App appContext, PeerId id){
 		this.appContext = appContext;
 		this.id = id;
+	}
+
+	public Collection<PeerLink> getLinks(){
+		return networkLinks.values();
 	}
 
 	private native void queueRootMessage(long ptr);
@@ -78,6 +94,21 @@ public class Peer {
 		this.connection = connection;
 	}
 
+	void processAck(PeerId myId, PeerSocketLink link, Ack msg) {
+		for(Ack.LinkAck linkAck : msg.links){
+			if (!linkAck.id.equals(myId))
+				continue;
+
+			link.lastAckTime = SystemClock.elapsedRealtime();
+			if (link.ackedUnicast != linkAck.unicast ||
+					link.ackedBroadcast != linkAck.broadcast) {
+				link.ackedUnicast = linkAck.unicast;
+				link.ackedBroadcast = linkAck.broadcast;
+				observable.notifyObservers();
+			}
+		}
+	}
+
 	// from JNI, send these bytes to this peer so they can process them
 	private void syncMessage(byte[] message){
 		getConnection().queue(new SyncMsg(message));
@@ -92,6 +123,7 @@ public class Peer {
 			if (length <= file.EOF)
 				return;
 			possibleTransfers.add(new PeerTransfer(this, file, filename, length, hash));
+			observable.notifyObservers();
 			nextTransfer();
 		}catch (IOException e){
 			Log.e(TAG, e.getMessage(), e);
@@ -106,6 +138,7 @@ public class Peer {
 			long EOF = transfer.file.EOF;
 			if (transfer.newLength <= EOF) {
 				possibleTransfers.remove(i);
+				observable.notifyObservers();
 				continue;
 			}
 
@@ -114,6 +147,7 @@ public class Peer {
 				Log.v(TAG, "Requesting "+transfer.filename+" "+EOF+" +"+length);
 				connection.queue(new RequestBlock(transfer.filename, EOF, length));
 				requested+=length;
+				observable.notifyObservers();
 			}
 			i++;
 		}
@@ -143,6 +177,7 @@ public class Peer {
 				return;
 
 			Log.v(TAG, "Sending "+filename+" "+offset+" +"+length);
+			transmitting+=length;
 			getConnection().queue(new FileBlock(filename, offset, length, file));
 		} catch (IOException e) {
 			Log.v(TAG, e.getMessage(), e);
@@ -157,11 +192,32 @@ public class Peer {
 		} catch (IOException e) {
 			Log.v(TAG, e.getMessage(), e);
 		}
+		observable.notifyObservers();
 		nextTransfer();
 	}
 
 	public boolean isAlive(){
 		return connection!=null || !networkLinks.isEmpty();
+	}
+
+	public void checkLinks(){
+		Iterator<Map.Entry<Object, PeerLink>> li = networkLinks.entrySet().iterator();
+		while(li.hasNext()){
+			Map.Entry<Object, PeerLink> el = li.next();
+			PeerLink l = el.getValue();
+
+			if (l instanceof PeerSocketLink) {
+				PeerSocketLink link = (PeerSocketLink) l;
+				if (!link.network.up || link.isDead()) {
+					Log.v(TAG, "Dead peer link from "+link.addr+
+							" ("+link.network.up+
+							", "+link.heardBroadcast()+", "+link.heardUnicast()+")");
+					li.remove();
+					observable.notifyObservers(link);
+				}
+			}
+		}
+
 	}
 
 	public void linksDied() {
@@ -175,5 +231,51 @@ public class Peer {
 		}
 		requested=0;
 		received=0;
+		transmitting=0;
+		observable.notifyObservers();
+	}
+
+	PeerSocketLink processHeader(IPInterface network, SocketAddress addr, Header hdr){
+		PeerSocketLink link = (PeerSocketLink) networkLinks.get(addr);
+		long now = SystemClock.elapsedRealtime();
+
+		if (link == null){
+			Log.v(TAG, "New peer link from "+addr);
+			link = new PeerSocketLink(network, addr);
+			networkLinks.put(addr, link);
+		}
+
+		if (hdr.unicast) {
+			link.unicastPackets++;
+			link.lastHeardUnicast = now;
+		}else {
+			link.broadcastPackets++;
+			link.lastHeardBroadcast = now;
+		}
+		// TODO detect if link state actually changed?
+		observable.notifyObservers(link);
+		return link;
+	}
+
+	@Override
+	public String toString() {
+		StringBuilder sb = new StringBuilder();
+		sb.append(id.toString());
+
+		if (requested>received || transmitting>transmitted)
+			sb.append(" Syncing");
+
+		if (!isAlive())
+			sb.append(" DEAD");
+
+		return sb.toString();
+	}
+
+	public void wrote(Message msg) {
+		if (msg instanceof FileBlock){
+			FileBlock req = (FileBlock)msg;
+			transmitted += req.wrote;
+			observable.notifyObservers();
+		}
 	}
 }

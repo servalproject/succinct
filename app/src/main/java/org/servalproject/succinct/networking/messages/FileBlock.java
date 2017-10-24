@@ -15,6 +15,7 @@ public class FileBlock extends Message<FileBlock>{
 	public final String filename;
 	public long offset;
 	public long length;
+	public long wrote;
 	public final byte[] data;
 	private static final String TAG = "FileBlock";
 
@@ -53,18 +54,17 @@ public class FileBlock extends Message<FileBlock>{
 		@Override
 		public void serialise(Serialiser serialiser, FileBlock object) {
 			serialiser.putString(object.filename);
-			serialiser.putLong(object.offset);
+			serialiser.putLong(object.offset + object.wrote);
 			int len = serialiser.remaining();
-			if (len > object.length)
-				len = (int) object.length;
+			if (len > object.length - object.wrote)
+				len = (int) (object.length - object.wrote);
 
 			ByteBuffer buff = serialiser.slice(len);
 
 			try {
-				int read = object.file.readBytes(object.offset, buff);
+				int read = object.file.readBytes(object.offset + object.wrote, buff);
 				serialiser.skip(read);
-				object.length -= read;
-				object.offset += read;
+				object.wrote += read;
 			} catch (IOException e) {
 				throw new IllegalStateException(e);
 			}
@@ -78,7 +78,7 @@ public class FileBlock extends Message<FileBlock>{
 
 	@Override
 	protected boolean isComplete() {
-		return length==0;
+		return (length - wrote) ==0;
 	}
 
 	@Override

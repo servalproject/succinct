@@ -15,6 +15,8 @@ public class PeerSocketLink extends PeerLink {
 	public long lastAckTime=-1;
 	public boolean ackedUnicast=false;
 	public boolean ackedBroadcast=false;
+	public int unicastPackets=0;
+	public int broadcastPackets=0;
 
 	PeerSocketLink(IPInterface network, SocketAddress addr){
 		this.network = network;
@@ -40,22 +42,57 @@ public class PeerSocketLink extends PeerLink {
 	// revert to broadcast again.
 
 	public boolean heardBroadcast(){
-		return (SystemClock.elapsedRealtime() - lastHeardBroadcast) < Networks.HEARTBEAT_MS *3;
+		return heardBroadcast(SystemClock.elapsedRealtime());
+	}
+
+	public boolean heardBroadcast(long elapsedTime){
+		return (elapsedTime - lastHeardBroadcast) < Networks.HEARTBEAT_MS *3;
 	}
 
 	public boolean heardUnicast(){
-		return (SystemClock.elapsedRealtime() - lastHeardUnicast) < Networks.HEARTBEAT_MS *6;
+		return heardUnicast(SystemClock.elapsedRealtime());
+	}
+	public boolean heardUnicast(long elapsedTime){
+		return (elapsedTime - lastHeardUnicast) < Networks.HEARTBEAT_MS *6;
 	}
 
 	public boolean isDead(){
-		return (SystemClock.elapsedRealtime() - Math.max(lastHeardBroadcast, lastHeardUnicast)) > Networks.HEARTBEAT_MS *6;
+		return isDead(SystemClock.elapsedRealtime());
+	}
+	public boolean isDead(long elapsedTime){
+		return (elapsedTime - Math.max(lastHeardBroadcast, lastHeardUnicast)) > Networks.HEARTBEAT_MS *6;
 	}
 
-	public boolean theyAckedUnicast() {
-		return ackedUnicast && (SystemClock.elapsedRealtime() - lastAckTime) < Networks.HEARTBEAT_MS *6;
+	public boolean theyAckedUnicast(){
+		return theyAckedUnicast(SystemClock.elapsedRealtime());
+	}
+	public boolean theyAckedUnicast(long elapsedTime) {
+		return ackedUnicast && (elapsedTime - lastAckTime) < Networks.HEARTBEAT_MS *6;
 	}
 
-	public boolean theyAckedBroadcast() {
-		return ackedBroadcast && (SystemClock.elapsedRealtime() - lastAckTime) < Networks.HEARTBEAT_MS *6;
+	public boolean theyAckedBroadcast(){
+		return theyAckedBroadcast(SystemClock.elapsedRealtime());
+	}
+	public boolean theyAckedBroadcast(long elapsedTime) {
+		return ackedBroadcast && (elapsedTime - lastAckTime) < Networks.HEARTBEAT_MS *6;
+	}
+
+	@Override
+	public String toString() {
+		long elapsedTime = SystemClock.elapsedRealtime();
+		StringBuilder sb = new StringBuilder();
+		sb
+			.append(addr.toString())
+			.append(" IN: U")
+			.append(unicastPackets)
+			.append(heardUnicast(elapsedTime)?"*":"")
+			.append(" B")
+			.append(broadcastPackets)
+			.append(heardBroadcast(elapsedTime)?"*":"")
+			.append(" ACK:")
+			.append(theyAckedUnicast(elapsedTime)?'U':' ')
+			.append(theyAckedBroadcast(elapsedTime)?'B':' ')
+		;
+		return sb.toString();
 	}
 }

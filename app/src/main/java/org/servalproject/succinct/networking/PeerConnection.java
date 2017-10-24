@@ -67,6 +67,8 @@ public class PeerConnection extends StreamHandler {
 				break;
 			if (!msg.write(writeBuffer))
 				break;
+			if (peer != null)
+				peer.wrote(msg);
 			queue.poll();
 		}
 	}

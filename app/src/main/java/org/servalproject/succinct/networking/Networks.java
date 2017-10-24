@@ -55,8 +55,9 @@ public class Networks {
 	public final PeerId myId;
 	private final NioLoop nioLoop;
 
-	public final Set<IPInterface> networks = new HashSet<>();
+	public final Map<String, IPInterface> networks = new HashMap<>();
 	private final Map<PeerId, Peer> peers = new HashMap<>();
+	public final Observable observePeers = new ChangedObservable();
 
 	// track the set of known team id's, and which peer we should contact to ask about it
 	private HashMap<PeerId, Team> knownTeams = new HashMap<>();
@@ -64,7 +65,6 @@ public class Networks {
 
 	private native void beginPolling();
 
-	// TODO, keeping enabled will slowly drain battery...
 	private boolean backgroundEnabled = true;
 
 	private static Networks instance;
@@ -102,7 +102,7 @@ public class Networks {
 					return;
 
 				IPInterface receiveInterface=null;
-				for(IPInterface i : networks){
+				for(IPInterface i : networks.values()){
 					if (i.isInSubnet(addr.getAddress())) {
 						receiveInterface = i;
 						break;
@@ -145,10 +145,15 @@ public class Networks {
 		if (peer == null){
 			peer = new Peer(appContext, id);
 			peers.put(id, peer);
+			observePeers.notifyObservers(peer);
 			Log.v(TAG, "New peer");
 			setAlarm(10);
 		}
 		return peer;
+	}
+
+	public Collection<Peer> getPeers(){
+		return peers.values();
 	}
 
 	private void process(IPInterface network, SocketAddress addr, ByteBuffer buff) {
@@ -164,17 +169,7 @@ public class Networks {
 			return;
 		}
 
-		PeerSocketLink link = (PeerSocketLink) peer.networkLinks.get(addr);
-		if (link == null){
-			Log.v(TAG, "New peer link from "+addr);
-			link = new PeerSocketLink(network, addr);
-			peer.networkLinks.put(addr, link);
-		}
-
-		if (hdr.unicast)
-			link.lastHeardUnicast = SystemClock.elapsedRealtime();
-		else
-			link.lastHeardBroadcast = SystemClock.elapsedRealtime();
+		PeerSocketLink link = peer.processHeader(network, addr, hdr);
 
 		while(buff.hasRemaining()){
 			Message msg = Message.parseMessage(buff);
@@ -183,7 +178,7 @@ public class Networks {
 
 			switch (msg.type){
 				case AckMessage:
-					processAck(peer, link, (Ack)msg);
+					peer.processAck(myId, link, (Ack)msg);
 					break;
 				case StoreStateMessage:
 					processStoreState(peer, (StoreState)msg);
@@ -210,17 +205,6 @@ public class Networks {
 		peer.getConnection().queue(new RequestTeam(state.teamId));
 	}
 
-	private void processAck(Peer peer, PeerSocketLink link, Ack msg) {
-		for(Ack.LinkAck linkAck : msg.links){
-			if (!linkAck.id.equals(myId))
-				continue;
-
-			link.lastAckTime = SystemClock.elapsedRealtime();
-			link.ackedUnicast = linkAck.unicast;
-			link.ackedBroadcast = linkAck.broadcast;
-		}
-	}
-
 	public void setAlarm(int delay){
 		if (networks.isEmpty() || !backgroundEnabled)
 			return;
@@ -238,7 +222,7 @@ public class Networks {
 			if (!new File("/sys/class/net/"+name+"/phy80211").exists())
 				return;
 
-			networks.add(network);
+			networks.put(name, network);
 
 			// wait a little while for the kernel to finish bringing the interface up
 			setAlarm(10);
@@ -249,16 +233,17 @@ public class Networks {
 
 	// called from JNI
 	private void onRemove(String name, byte[] addr, byte[] broadcast, int prefixLen){
-		try {
-			IPInterface network = new IPInterface(name, addr, broadcast, prefixLen);
-			Log.v(TAG, "Remove "+network);
-			networks.remove(network);
-			if (networks.isEmpty())
-				alarm.cancel();
-			trimDead();
-		} catch (UnknownHostException e) {
-			Log.e(TAG, e.getMessage(), e);
-		}
+		if (!networks.containsKey(name))
+			return;
+
+		IPInterface network = networks.get(name);
+		network.up = false;
+		Log.v(TAG, "Remove "+network);
+
+		networks.remove(name);
+		if (networks.isEmpty())
+			alarm.cancel();
+		trimDead();
 	}
 
 	private void trimDead(){
@@ -267,25 +252,12 @@ public class Networks {
 			Map.Entry<PeerId, Peer> ep = pi.next();
 			Peer p = ep.getValue();
 
-			Iterator<Map.Entry<Object, PeerLink>> li = p.networkLinks.entrySet().iterator();
-			while(li.hasNext()){
-				Map.Entry<Object, PeerLink> el = li.next();
-				PeerLink l = el.getValue();
-
-				if (l instanceof PeerSocketLink) {
-					PeerSocketLink link = (PeerSocketLink) l;
-					if (!networks.contains(link.network) || link.isDead()) {
-						Log.v(TAG, "Dead peer link from "+link.addr+
-								" ("+networks.contains(link.network)+
-								", "+link.heardBroadcast()+", "+link.heardUnicast()+")");
-						li.remove();
-					}
-				}
-			}
+			p.checkLinks();
 
 			if (!p.isAlive()) {
 				p.linksDied();
 				pi.remove();
+				observePeers.notifyObservers(p);
 			}
 		}
 	}
@@ -335,7 +307,7 @@ public class Networks {
 					state.write(buff);
 
 				buff.flip();
-				for (IPInterface i : networks) {
+				for (IPInterface i : networks.values()) {
 					try {
 						dgram.send(buff, new InetSocketAddress(i.broadcastAddress, PORT));
 					} catch (SecurityException se) {

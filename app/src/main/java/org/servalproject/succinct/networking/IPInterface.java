@@ -9,6 +9,7 @@ public class IPInterface implements Interface{
 	final InetAddress address;
 	final int prefixLength;
 	final InetAddress broadcastAddress;
+	public boolean up = true;
 
 	IPInterface(String name, byte[] addr, byte[] broadcast, int prefixLength) throws UnknownHostException {
 		this.name = name;
@@ -16,6 +17,7 @@ public class IPInterface implements Interface{
 		this.address = InetAddress.getByAddress(addr);
 		this.broadcastAddress = InetAddress.getByAddress(broadcast);
 		this.prefixLength = prefixLength;
+		up = true;
 	}
 
 	public boolean isInSubnet(InetAddress testAddress){
