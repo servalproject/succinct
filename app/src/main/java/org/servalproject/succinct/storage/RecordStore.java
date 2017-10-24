@@ -125,6 +125,21 @@ public class RecordStore {
 		}
 	}
 
+	public int read(long offset, byte[] bytes) throws IOException{
+		return read(offset, bytes, 0, bytes.length);
+	}
+
+	public synchronized int read(long offset, byte[] bytes, int o, int len) throws IOException{
+		if (offset >= EOF)
+			return -1;
+		if (offset + len > EOF)
+			len = (int) (EOF - offset);
+		if (len <=0)
+			return 0;
+		file.seek(offset);
+		return file.read(bytes, o, len);
+	}
+
 	public synchronized void readBytes(long offset, byte[] bytes) throws IOException {
 		if (offset+bytes.length>EOF)
 			throw new IllegalStateException();

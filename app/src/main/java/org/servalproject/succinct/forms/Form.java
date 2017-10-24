@@ -11,7 +11,11 @@ import org.servalproject.succinct.storage.RecordStore;
 import org.servalproject.succinct.storage.Serialiser;
 import org.servalproject.succinct.storage.TeamStorage;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStreamReader;
 
 public class Form {
 
@@ -42,6 +46,24 @@ public class Form {
 	};
 
 	private static final String TAG = "Forms";
+
+
+	private static String readFile(File file) throws IOException{
+		StringBuilder sb = new StringBuilder();
+		InputStreamReader in = new InputStreamReader(new FileInputStream(file), "UTF-8");
+		char[] buff = new char[1024];
+		while(true) {
+			int len = in.read(buff);
+			if (len<0)
+				break;
+			sb.append(buff, 0, len);
+		}
+		return sb.toString();
+	}
+
+	public static void compress(Context context, File formSpecification, File completedRecord) throws IOException {
+		compress(context, readFile(formSpecification), readFile(completedRecord));
+	}
 
 	public static void compress(Context context, String formSpecification, String completedRecord){
 		App app = (App)context.getApplicationContext();

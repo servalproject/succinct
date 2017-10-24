@@ -23,12 +23,14 @@ import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.networking.PeerId;
 import org.servalproject.succinct.storage.DeSerialiser;
 import org.servalproject.succinct.storage.RecordIterator;
+import org.servalproject.succinct.storage.RecordStore;
 import org.servalproject.succinct.storage.Serialiser;
 import org.servalproject.succinct.storage.StorageWatcher;
 import org.servalproject.succinct.storage.TeamStorage;
 import org.servalproject.succinct.team.Membership;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.team.TeamMember;
+import org.servalproject.succinct.utils.AndroidObserver;
 import org.servalproject.succinct.utils.SeqTracker;
 import org.servalproject.succinct.utils.WakeAlarm;
 
@@ -41,13 +43,18 @@ import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.io.Reader;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Observable;
 
 import static org.servalproject.succinct.messaging.Fragment.TYPE_PARTIAL;
 
@@ -73,6 +80,21 @@ public class MessageQueue {
 
 	private final StorageWatcher<TeamMember> memberWatcher;
 	private final QueueWatcher<Form> formWatcher;
+	private final Map<String, RecordStore> newFormDefinitions = new HashMap<>();
+	private final AndroidObserver formDefinitionWatcher = new AndroidObserver() {
+		@Override
+		public void observe(Observable observable, Object o) {
+			RecordStore file = (RecordStore)o;
+			if (!file.filename.getParentFile().getName().equals("forms"))
+				return;
+			if (newFormDefinitions.containsKey(file.filename.getName()))
+				return;
+			if ("true".equals(file.getProperty("uploaded")))
+				return;
+			newFormDefinitions.put(file.filename.getName(), file);
+		}
+	};
+
 	private final QueueWatcher<StoredChatMessage> chatWatcher;
 
 	private final LocationQueueWatcher locationWatcher;
@@ -288,12 +310,24 @@ public class MessageQueue {
 			chatWatcher.activate();
 			locationWatcher.activate();
 			formWatcher.activate();
+			store.observable.addObserver(formDefinitionWatcher);
+			File[] files = new File(store.root, "forms").listFiles();
+			if (files!=null) {
+				for (File f : files) {
+					try {
+						formDefinitionWatcher.observe(null, store.openFile("forms/" + f.getName()));
+					} catch (IOException e) {
+						Log.e(TAG, e.getMessage(), e);
+					}
+				}
+			}
 		}else{
 			// stop listening for storage changes
 			memberWatcher.deactivate();
 			formWatcher.deactivate();
 			chatWatcher.deactivate();
 			locationWatcher.deactivate();
+			store.observable.deleteObserver(formDefinitionWatcher);
 		}
 	}
 
@@ -616,6 +650,74 @@ public class MessageQueue {
 
 		} catch (IOException e) {
 			Log.e(TAG, e.getMessage(), e);
+		}
+
+		uploadFormDefinitions();
+	}
+
+	private void uploadFormDefinitions() {
+		String baseUrl = getBaseUrl();
+		if (baseUrl == null)
+			return;
+
+		Iterator<Map.Entry<String,RecordStore>> i = newFormDefinitions.entrySet().iterator();
+		while(i.hasNext()){
+			try {
+				Map.Entry<String, RecordStore> e = i.next();
+				RecordStore store = e.getValue();
+				String hash = store.filename.getName();
+				URL url = new URL(baseUrl + "/succinct/api/v1/haveForm/" + hash + "?key=" + BuildConfig.directApiKey);
+				Log.v(TAG, "Connecting to "+url);
+				String result = null;
+				HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+				try {
+					connection.setRequestProperty("Connection", "keep-alive");
+					connection.connect();
+					int response = connection.getResponseCode();
+					if (response != 200) {
+						Log.v(TAG, "Unexpected http response code " + response);
+						return;
+					}
+					result = readString(connection);
+				}finally{
+					connection.disconnect();
+				}
+
+				if ("false".equals(result)){
+					url = new URL(baseUrl + "/succinct/api/v1/uploadForm/" + hash + "?key=" + BuildConfig.directApiKey);
+					Log.v(TAG, "Connecting to "+url);
+					connection = (HttpURLConnection) url.openConnection();
+					try {
+						connection.setRequestMethod("POST");
+						connection.setRequestProperty("Connection", "keep-alive");
+						connection.setRequestProperty("Content-Type", "application/octet-stream");
+						connection.setFixedLengthStreamingMode((int) store.EOF);
+						connection.connect();
+
+						OutputStream out = connection.getOutputStream();
+						byte buff[] = new byte[1024];
+						long offset = 0;
+						while (true) {
+							int read = store.read(offset, buff);
+							if (read <= 0)
+								break;
+							out.write(buff, 0, read);
+						}
+						out.close();
+						int response = connection.getResponseCode();
+						if (response != 200) {
+							Log.e(TAG, "Unexpected http response code " + response);
+							return;
+						}
+					}finally{
+						connection.disconnect();
+					}
+				}
+				store.putProperty("uploaded", "true");
+				i.remove();
+			}catch (IOException e){
+				Log.e(TAG, e.getMessage(), e);
+			}
 		}
 	}
 
