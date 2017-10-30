@@ -230,6 +230,7 @@ public class MessageQueue {
 				Serialiser serialiser = new Serialiser();
 				serialiser.putByte((byte) pos);
 				serialiser.putTime(form.time, store.getTeam().epoc);
+				serialiser.putFixedBytes(form.record);
 				Log.v(TAG, "Sending form from "+records.getOffset());
 				int delay = MessageQueue.this.app.getPrefs().getInt(App.FORM_DELAY, 60000);
 				fragmentMessage(form.time+delay, FORM, serialiser.getResult());
