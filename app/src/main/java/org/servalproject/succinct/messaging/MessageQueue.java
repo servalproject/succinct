@@ -649,7 +649,7 @@ public class MessageQueue {
 				}
 			}
 
-		} catch (IOException e) {
+		} catch (NumberFormatException | IOException e){
 			Log.e(TAG, e.getMessage(), e);
 		}
 

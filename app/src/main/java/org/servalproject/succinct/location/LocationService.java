@@ -13,6 +13,7 @@ import android.location.LocationProvider;
 import android.os.Binder;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.SystemClock;
 import android.support.annotation.Nullable;
 import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
@@ -167,17 +168,22 @@ public class LocationService extends Service {
         if (newLocation.getLatitude() == 0 && newLocation.getLongitude() == 0)
             return;
 
-        if (!fresh){
-            // Filter fixes that we might have seen before
-            if (lastLocation!=null) {
-                // don't store a stale fix.
-                if (newLocation.getTime() <= lastLocation.getTime())
-                    return;
-            }
+        long elapsed = newLocation.getElapsedRealtimeNanos();
+        long elapsedNow = SystemClock.elapsedRealtimeNanos();
+        long now = System.currentTimeMillis();
 
-            // Or one from the mysterious future (somehow??)
-            if (newLocation.getTime() > System.currentTimeMillis())
+
+        // Filter fixes that we might have seen before
+        if (lastLocation!=null) {
+            long oldElapsed = lastLocation.getElapsedRealtimeNanos();
+            // if we can, filter based on time since boot
+            if(oldElapsed != 0 && elapsed <= oldElapsed) {
+                Log.v(TAG, "Ignoring stale fix ("+fresh+", "+(lastLocation.getTime() - newLocation.getTime())+"): "+lastLocation+" vs "+newLocation);
                 return;
+            }else if (oldElapsed == 0 && newLocation.getTime() <= lastLocation.getTime()) {
+                Log.v(TAG, "Ignoring stale fix (" + fresh + ", " + (lastLocation.getTime() - newLocation.getTime()) + "): " + lastLocation + " vs " + newLocation);
+                return;
+            }
         }
 
         // todo logic with accuracy and timing to determine if new location should be used

@@ -6,19 +6,10 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.preference.PreferenceManager;
 
-import org.servalproject.succinct.chat.ChatDatabase;
-import org.servalproject.succinct.chat.StoredChatMessage;
-import org.servalproject.succinct.messaging.MessageQueue;
 import org.servalproject.succinct.messaging.rock.RockMessaging;
 import org.servalproject.succinct.networking.Networks;
 import org.servalproject.succinct.networking.PeerId;
-import org.servalproject.succinct.storage.RecordIterator;
-import org.servalproject.succinct.storage.Storage;
-import org.servalproject.succinct.storage.StorageWatcher;
 import org.servalproject.succinct.storage.TeamStorage;
-import org.servalproject.succinct.team.MembershipList;
-import org.servalproject.succinct.team.Team;
-import org.servalproject.succinct.team.TeamMember;
 
 import java.io.IOException;
 
@@ -100,8 +91,9 @@ public class App extends Application {
 				TeamStorage.reloadTeam(this, teamId, myId);
 			networks = Networks.init(this, myId);
 
-		} catch (java.io.IOException e) {
-			throw new IllegalStateException("");
+
+		} catch (IOException e) {
+			throw new IllegalStateException(e);
 		}
 	}
 
