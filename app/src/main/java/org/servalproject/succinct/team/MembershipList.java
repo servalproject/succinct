@@ -60,9 +60,11 @@ public class MembershipList {
 					int pos = members.size();
 					members.add(member);
 					positions.put(membership.peerId, pos);
+					removed.remove(membership.peerId);
 				}
 			}else{
 				removed.add(membership.peerId);
+				positions.remove(membership.peerId);
 			}
 		}
 		return members;
