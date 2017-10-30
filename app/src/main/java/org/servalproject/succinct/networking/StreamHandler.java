@@ -1,5 +1,7 @@
 package org.servalproject.succinct.networking;
 
+import android.os.SystemClock;
+
 import org.servalproject.succinct.networking.messages.Message;
 
 import java.io.IOException;
@@ -11,6 +13,8 @@ import java.nio.channels.SocketChannel;
 public abstract class StreamHandler extends NioHandler<SocketChannel> {
 	private ByteBuffer readBuffer;
 	private ByteBuffer writeBuffer;
+	protected long lastRead =-1;
+	protected long lastWrite =-1;
 
 	protected StreamHandler(SocketChannel channel) {
 		super(channel);
@@ -43,6 +47,7 @@ public abstract class StreamHandler extends NioHandler<SocketChannel> {
 			close();
 			return;
 		}
+		lastRead = SystemClock.elapsedRealtime();
 		readBuffer.flip();
 		emptyReadBuffer(readBuffer);
 		readBuffer.compact();
@@ -59,6 +64,7 @@ public abstract class StreamHandler extends NioHandler<SocketChannel> {
 				close();
 				return;
 			}
+			lastWrite = SystemClock.elapsedRealtime();
 		}
 		tryFill();
 	}

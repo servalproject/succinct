@@ -2,13 +2,6 @@ package org.servalproject.succinct.networking;
 
 
 import android.app.AlarmManager;
-import android.app.PendingIntent;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
-import android.os.Build;
-import android.os.PowerManager;
 import android.os.SystemClock;
 import android.util.Log;
 
@@ -18,7 +11,6 @@ import org.servalproject.succinct.networking.messages.Header;
 import org.servalproject.succinct.networking.messages.Message;
 import org.servalproject.succinct.networking.messages.RequestTeam;
 import org.servalproject.succinct.networking.messages.StoreState;
-import org.servalproject.succinct.storage.Serialiser;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.utils.ChangedObservable;
 import org.servalproject.succinct.utils.WakeAlarm;
@@ -35,12 +27,9 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 import java.util.Observable;
-import java.util.Set;
 
 public class Networks {
 	private static final int PORT = 4043;
@@ -60,7 +49,7 @@ public class Networks {
 	public final Observable observePeers = new ChangedObservable();
 
 	// track the set of known team id's, and which peer we should contact to ask about it
-	private HashMap<PeerId, Team> knownTeams = new HashMap<>();
+	private final HashMap<PeerId, Team> knownTeams = new HashMap<>();
 	public final Observable teams = new ChangedObservable();
 
 	private native void beginPolling();
@@ -145,6 +134,12 @@ public class Networks {
 	public Peer getPeer(PeerId id){
 		if (myId.equals(id))
 			return null;
+		return peers.get(id);
+	}
+
+	public Peer createPeer(PeerId id){
+		if (myId.equals(id))
+			return null;
 		Peer peer = peers.get(id);
 		if (peer == null){
 			peer = new Peer(appContext, id);
@@ -167,7 +162,7 @@ public class Networks {
 			Log.w(TAG, "Unable to parse header!");
 			return;
 		}
-		Peer peer = getPeer(hdr.id);
+		Peer peer = createPeer(hdr.id);
 		if (peer == null) {
 			// TODO double check that the packet came from one of our interfaces?
 			return;

@@ -171,6 +171,7 @@ public class MainActivity extends AppCompatActivity
 
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_settings) {
+            navigate(R.id.nav_settings, getString(R.string.nav_settings));
             return true;
         }
 

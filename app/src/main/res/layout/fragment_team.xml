@@ -233,15 +233,18 @@
                     android:layout_marginEnd="16dp"
                     tools:text="Team A" />
 
-                <LinearLayout
+                <android.support.v7.widget.RecyclerView
                     android:id="@+id/team_members"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                    android:layout_height="match_parent"
                     android:layout_below="@+id/team_name"
                     android:orientation="vertical"
                     android:layout_marginStart="16dp"
-                    android:layout_marginEnd="16dp">
-                </LinearLayout>
+                    android:layout_marginEnd="16dp"
+                    android:fadeScrollbars="false"
+                    android:scrollbars="vertical"
+                    app:layoutManager="android.support.v7.widget.LinearLayoutManager">
+                </android.support.v7.widget.RecyclerView>
 
                 <Switch
                     android:id="@+id/team_allow_joining_switch"

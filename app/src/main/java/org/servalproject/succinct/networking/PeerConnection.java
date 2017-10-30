@@ -4,8 +4,10 @@ package org.servalproject.succinct.networking;
 import org.servalproject.succinct.networking.messages.Header;
 import org.servalproject.succinct.networking.messages.Message;
 
+import java.io.IOException;
 import java.net.ProtocolException;
 import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.util.Comparator;
 import java.util.PriorityQueue;
@@ -14,6 +16,8 @@ import java.util.Queue;
 public class PeerConnection extends StreamHandler {
 	private final Networks networks;
 	private Peer peer;
+	final boolean initiated;
+	boolean shutdown = false;
 	private final Queue<Message> queue = new PriorityQueue<>(10, new Comparator<Message>() {
 		@Override
 		public int compare(Message one, Message two) {
@@ -22,11 +26,16 @@ public class PeerConnection extends StreamHandler {
 	});
 
 	public PeerConnection(Networks networks, SocketChannel client) {
-		this(networks, client, null);
+		this(networks, client, null, false);
 	}
 
 	public PeerConnection(Networks networks, SocketChannel client, Peer peer) {
+		this(networks, client, peer, true);
+	}
+
+	private PeerConnection(Networks networks, SocketChannel client, Peer peer, boolean initiated) {
 		super(client);
+		this.initiated = initiated;
 		this.networks = networks;
 		this.peer = peer;
 		queue.add(new Header(networks.myId, true));
@@ -46,7 +55,7 @@ public class PeerConnection extends StreamHandler {
 
 			if (msg instanceof Header){
 				Header hdr = (Header)msg;
-				peer = networks.getPeer(hdr.id);
+				peer = networks.createPeer(hdr.id);
 				peer.setConnection(this);
 				continue;
 			}
@@ -73,9 +82,24 @@ public class PeerConnection extends StreamHandler {
 		}
 	}
 
+	@Override
+	public void write() throws IOException {
+		super.write();
+		if (shutdown && (getInterest() & SelectionKey.OP_WRITE)==0)
+			close();
+	}
+
 	public void queue(Message message) {
+		if (shutdown)
+			throw new IllegalStateException();
 		queue.add(message);
 		tryFill();
+	}
+
+	public void shutdown(){
+		shutdown = true;
+		if (queue.isEmpty())
+			close();
 	}
 
 	@Override

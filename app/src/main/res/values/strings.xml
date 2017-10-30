@@ -40,4 +40,7 @@
     <string name="pref_enable_rock">Send via Iridium</string>
     <string name="pref_enable_http">Send via HTTP</string>
     <string name="pref_enable_sms">Send via SMS</string>
+    <string name="member_inactive">(Left)</string>
+    <string name="peer_not_connected">No Connection</string>
+    <string name="peer_connected">Connected</string>
 </resources>

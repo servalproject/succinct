@@ -27,6 +27,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import org.servalproject.succinct.storage.TeamStorage;
+import org.servalproject.succinct.team.MemberAdapter;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.team.TeamAdapter;
 import org.servalproject.succinct.utils.AndroidObserver;
@@ -57,6 +58,7 @@ public class TeamFragment extends Fragment {
     private App app;
     private SharedPreferences prefs;
     private TeamAdapter teamAdapter = new TeamAdapter(this);
+    private MemberAdapter memberAdapter;
     private ProgressBar progress;
 
     @TeamState int state;
@@ -74,7 +76,7 @@ public class TeamFragment extends Fragment {
         }
 
         app = (App)getActivity().getApplication();
-
+        memberAdapter = new MemberAdapter(app, this);
         prefs = PreferenceManager.getDefaultSharedPreferences(getActivity());
         String name = prefs.getString(App.MY_NAME, null);
         String employeeId = prefs.getString(App.MY_EMPLOYEE_ID, null);
@@ -222,6 +224,9 @@ public class TeamFragment extends Fragment {
                 TextView teamName = (TextView) card.findViewById(R.id.team_name);
                 teamName.setText(myTeamName);
 
+                RecyclerView teamMembers = (RecyclerView) card.findViewById(R.id.team_members);
+                teamMembers.setAdapter(memberAdapter);
+
                 Button leave = (Button)card.findViewById(R.id.leave_team_button);
                 leave.setOnClickListener(new View.OnClickListener() {
                     @Override
@@ -263,16 +268,22 @@ public class TeamFragment extends Fragment {
     @Override
     public void onStart() {
         super.onStart();
-        if (state == TEAM_STATE_SCANNING) {
-            app.networks.teams.addObserver(teamObserver);
-            Collection<Team> teams = app.networks.getTeams();
-            for(Team t:teams)
-                Log.v(TAG, "Team; "+t.toString());
-            teamAdapter.setTeams(teams);
-            if (progress != null && teams.size() > 0) {
-                progress.setVisibility(View.GONE);
-            }
-            observing = true;
+        switch (state){
+            case TEAM_STATE_SCANNING:
+                app.networks.teams.addObserver(teamObserver);
+                Collection<Team> teams = app.networks.getTeams();
+                for(Team t:teams)
+                    Log.v(TAG, "Team; "+t.toString());
+                teamAdapter.setTeams(teams);
+                if (progress != null && teams.size() > 0) {
+                    progress.setVisibility(View.GONE);
+                }
+                observing = true;
+                break;
+
+            case TEAM_STATE_ACTIVE:
+                memberAdapter.onStart();
+                break;
         }
     }
 
@@ -281,6 +292,7 @@ public class TeamFragment extends Fragment {
         super.onStop();
         if (observing)
             app.networks.teams.deleteObserver(teamObserver);
+        memberAdapter.onStop();
     }
 
     private void redraw() {

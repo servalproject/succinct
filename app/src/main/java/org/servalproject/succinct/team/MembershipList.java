@@ -17,6 +17,7 @@ public class MembershipList {
 	private final HashMap<PeerId, Integer> positions = new HashMap<>();
 	private final Set<PeerId> removed = new HashSet<>();
 	private final RecordIterator<Membership> iterator;
+	private final List<PeerId> peerIds = new ArrayList<>();
 	private final List<TeamMember> members = new ArrayList<>();
 
 	public MembershipList(TeamStorage store) throws IOException {
@@ -24,6 +25,7 @@ public class MembershipList {
 		iterator = store.openIterator(Membership.factory, store.teamId);
 		iterator.start();
 		members.add(new TeamMember("","EOC"));
+		peerIds.add(PeerId.EOC);
 		positions.put(PeerId.EOC, 0);
 	}
 
@@ -31,7 +33,38 @@ public class MembershipList {
 		List<TeamMember> members = getMembers();
 		if (!positions.containsKey(id))
 			return null;
-		return members.get(positions.get(id));
+		int position = positions.get(id);
+		TeamMember member = members.get(position);
+		if (member == null){
+			RecordIterator<TeamMember> recordIterator = store.openIterator(TeamMember.factory, id);
+			recordIterator.end();
+			while(recordIterator.prev()){
+				member = recordIterator.read();
+				if (member.name!=null)
+					break;
+			}
+			members.set(position, member);
+		}
+		return member;
+	}
+
+	public TeamMember getTeamMember(int position) throws IOException{
+		List<TeamMember> members = getMembers();
+		if (position<0 || position>=members.size())
+			return null;
+		TeamMember member = members.get(position);
+		if (member == null){
+			PeerId id = peerIds.get(position);
+			RecordIterator<TeamMember> recordIterator = store.openIterator(TeamMember.factory, id);
+			recordIterator.end();
+			while(recordIterator.prev()){
+				member = recordIterator.read();
+				if (member.name!=null)
+					break;
+			}
+			members.set(position, member);
+		}
+		return member;
 	}
 
 	public boolean isActive(PeerId id) throws IOException {
@@ -39,9 +72,22 @@ public class MembershipList {
 		return positions.containsKey(id) && !removed.contains(id);
 	}
 
+	public boolean isActive(int position) throws IOException {
+		getMembers();
+		PeerId id = peerIds.get(position);
+		return positions.containsKey(id) && !removed.contains(id) && positions.get(id)==position;
+	}
+
 	public Integer getPosition(PeerId id) throws IOException {
 		getMembers();
 		return positions.get(id);
+	}
+
+	public PeerId getPeerId(int position) throws IOException {
+		getMembers();
+		if (position<0 || position>=peerIds.size())
+			return null;
+		return peerIds.get(position);
 	}
 
 	public synchronized List<TeamMember> getMembers() throws IOException {
@@ -59,6 +105,7 @@ public class MembershipList {
 					}
 					int pos = members.size();
 					members.add(member);
+					peerIds.add(membership.peerId);
 					positions.put(membership.peerId, pos);
 					removed.remove(membership.peerId);
 				}

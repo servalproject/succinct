@@ -72,7 +72,7 @@ public class Peer {
 	}
 
 	public PeerConnection getConnection(){
-		if (connection == null){
+		if (connection == null || connection.shutdown){
 			// TODO initiate connection
 			for(PeerLink l:networkLinks.values()){
 				try {
@@ -91,6 +91,8 @@ public class Peer {
 
 	public void setConnection(PeerConnection connection){
 		// TODO try to keep only one active connection?
+		if (this.connection!=null)
+			this.connection.shutdown();
 		this.connection = connection;
 	}
 
@@ -202,6 +204,7 @@ public class Peer {
 
 	public void checkLinks(){
 		Iterator<Map.Entry<Object, PeerLink>> li = networkLinks.entrySet().iterator();
+		boolean died=false;
 		while(li.hasNext()){
 			Map.Entry<Object, PeerLink> el = li.next();
 			PeerLink l = el.getValue();
@@ -209,6 +212,7 @@ public class Peer {
 			if (l instanceof PeerSocketLink) {
 				PeerSocketLink link = (PeerSocketLink) l;
 				if (!link.network.up || link.isDead()) {
+					died = true;
 					Log.v(TAG, "Dead peer link from "+link.addr+
 							" ("+link.network.up+
 							", "+link.heardBroadcast()+", "+link.heardUnicast()+")");
@@ -217,7 +221,10 @@ public class Peer {
 				}
 			}
 		}
-
+		if (died && networkLinks.isEmpty() && this.connection!=null){
+			this.connection.shutdown();
+			this.connection = null;
+		}
 	}
 
 	public void linksDied() {
