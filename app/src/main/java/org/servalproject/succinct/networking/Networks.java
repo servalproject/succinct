@@ -17,6 +17,7 @@ import org.servalproject.succinct.utils.WakeAlarm;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.net.UnknownHostException;
@@ -284,9 +285,11 @@ public class Networks {
 				trimDead();
 				int seq = Networks.this.seq++;
 
+				Header hdr = new Header(myId, false, seq & 0xFFFF);
+				Header unicastHdr = new Header(myId, true, seq & 0xFFFF);
+
 				// assemble a broadcast heartbeat packet
 				ByteBuffer buff = ByteBuffer.allocate(MTU);
-				Header hdr = new Header(myId, false, seq & 0xFFFF);
 				hdr.write(buff);
 
 				// TODO in a crowded network, all link acks might not fit in a single packet
@@ -311,6 +314,7 @@ public class Networks {
 				buff.flip();
 				for (IPInterface i : networks.values()) {
 					try {
+						//Log.v(TAG, "Heartbeat B "+i.broadcastAddress);
 						dgram.send(buff, new InetSocketAddress(i.broadcastAddress, PORT));
 					} catch (SecurityException se) {
 						Log.e(TAG, se.getMessage(), se);
@@ -319,7 +323,6 @@ public class Networks {
 					}
 				}
 
-				hdr = new Header(myId, true, seq & 0xFFFF);
 				// Send unicast heartbeats when we haven't heard recent confirmation of broadcast reception
 				for(Peer p:peers.values()){
 					PeerSocketLink link = sendUnicastAck(p);
@@ -327,17 +330,35 @@ public class Networks {
 						continue;
 
 					buff.clear();
-					hdr.write(buff);
+					unicastHdr.write(buff);
 					ack = new Ack();
 					ack.add(p, link);
 					ack.write(buff);
 					if (state != null)
 						state.write(buff);
-
 					buff.flip();
 
 					try {
+						//Log.v(TAG, "Heartbeat U "+link.addr);
 						dgram.send(buff, link.addr);
+					} catch (SecurityException se) {
+						Log.e(TAG, se.getMessage(), se);
+					} catch (IOException e) {
+						Log.e(TAG, e.getMessage(), e);
+					}
+				}
+
+				// send one unicast probe per interface
+				buff.clear();
+				unicastHdr.write(buff);
+				buff.flip();
+
+				for (IPInterface i : networks.values()) {
+					try {
+						// TODO skip addresses for peers we already know about
+						InetAddress addr = i.nextAddress();
+						//Log.v(TAG, "Probe U "+addr);
+						dgram.send(buff, new InetSocketAddress(addr, PORT));
 					} catch (SecurityException se) {
 						Log.e(TAG, se.getMessage(), se);
 					} catch (IOException e) {

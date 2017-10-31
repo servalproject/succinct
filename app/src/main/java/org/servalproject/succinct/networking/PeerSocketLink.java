@@ -15,7 +15,9 @@ public class PeerSocketLink extends PeerLink {
 	// assume broadcasts are filtered until we hear an ack
 	public long lastAckTime=-1;
 	public int lastAckSeq = -1;
+	public int ackUnicastCount=0;
 	public boolean ackedUnicast=false;
+	public int ackBroadcastCount=0;
 	public boolean ackedBroadcast=false;
 	public int unicastPackets=0;
 	public int broadcastPackets=0;

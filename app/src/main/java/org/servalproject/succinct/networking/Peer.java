@@ -103,13 +103,48 @@ public class Peer {
 
 			link.lastAckTime = SystemClock.elapsedRealtime();
 			link.lastAckSeq = linkAck.seq;
-			if (link.ackedUnicast != linkAck.unicast ||
-					link.ackedBroadcast != linkAck.broadcast) {
-				link.ackedUnicast = linkAck.unicast;
-				link.ackedBroadcast = linkAck.broadcast;
-				observable.notifyObservers();
+			if (linkAck.unicast)
+				link.ackUnicastCount++;
+			if (linkAck.broadcast)
+				link.ackBroadcastCount++;
+			link.ackedUnicast = linkAck.unicast;
+			link.ackedBroadcast = linkAck.broadcast;
+			observable.notifyObservers(link);
+		}
+	}
+
+	public static final int BROADCAST = 1;
+	public static final int RECENT_BROADCAST = 2;
+	public static final int RECENT_UNICAST = 4;
+	public static final int HEARD = 0x7;
+	public static final int ACK_BROADCAST = 0x10;
+	public static final int RECENT_ACK_BROADCAST = 0x20;
+	public static final int RECENT_ACK_UNICAST = 0x40;
+	public static final int ACKED = 0x70;
+
+	public int getLinkState(){
+		int ret = 0;
+		long elapsed = SystemClock.elapsedRealtime();
+		for(PeerLink l : networkLinks.values()){
+			if (l instanceof PeerSocketLink){
+				PeerSocketLink link = (PeerSocketLink)l;
+				if (link.broadcastPackets>0)
+					ret|=BROADCAST;
+				if (link.heardBroadcast(elapsed))
+					ret|=RECENT_BROADCAST;
+				if (link.heardUnicast(elapsed))
+					ret|=RECENT_UNICAST;
+
+				if (link.ackBroadcastCount>0)
+					ret|=ACK_BROADCAST;
+				if (link.theyAckedBroadcast(elapsed))
+					ret|=RECENT_ACK_BROADCAST;
+				if (link.theyAckedUnicast(elapsed))
+					ret|=RECENT_ACK_UNICAST;
+
 			}
 		}
+		return ret;
 	}
 
 	// from JNI, send these bytes to this peer so they can process them
