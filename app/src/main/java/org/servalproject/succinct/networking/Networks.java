@@ -56,6 +56,8 @@ public class Networks {
 
 	private boolean backgroundEnabled = true;
 
+	private int seq=0;
+
 	private static Networks instance;
 	public static Networks getInstance(){
 		return instance;
@@ -280,10 +282,11 @@ public class Networks {
 
 			if (backgroundEnabled && !networks.isEmpty()) {
 				trimDead();
+				int seq = Networks.this.seq++;
 
 				// assemble a broadcast heartbeat packet
 				ByteBuffer buff = ByteBuffer.allocate(MTU);
-				Header hdr = new Header(myId, false);
+				Header hdr = new Header(myId, false, seq & 0xFFFF);
 				hdr.write(buff);
 
 				// TODO in a crowded network, all link acks might not fit in a single packet
@@ -316,7 +319,7 @@ public class Networks {
 					}
 				}
 
-				hdr = new Header(myId, true);
+				hdr = new Header(myId, true, seq & 0xFFFF);
 				// Send unicast heartbeats when we haven't heard recent confirmation of broadcast reception
 				for(Peer p:peers.values()){
 					PeerSocketLink link = sendUnicastAck(p);

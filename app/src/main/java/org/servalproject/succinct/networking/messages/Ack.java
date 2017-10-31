@@ -27,10 +27,14 @@ public class Ack extends Message<Ack> {
 			while(serialiser.hasRemaining()){
 				PeerId id = new PeerId(serialiser);
 				byte flags = serialiser.getByte();
+				if ((flags&~7)!=0)
+					break;
 				boolean broadcast = (flags &2)>0;
 				boolean unicast = (flags &1)>0;
-
-				ret.add(id, broadcast, unicast);
+				int seq = -1;
+				if ((flags & 4)!=0)
+					seq = serialiser.getShort();
+				ret.add(id, broadcast, unicast, seq);
 			}
 			return ret;
 		}
@@ -47,11 +51,11 @@ public class Ack extends Message<Ack> {
 	}
 
 	public void add(Peer peer, PeerSocketLink link){
-		links.add(new LinkAck(peer.id, link.heardBroadcast(), link.heardUnicast()));
+		links.add(new LinkAck(peer.id, link.heardBroadcast(), link.heardUnicast(), link.lastHeardSeq));
 	}
 
-	private void add(PeerId id, boolean broadcast, boolean unicast){
-		links.add(new LinkAck(id, broadcast, unicast));
+	private void add(PeerId id, boolean broadcast, boolean unicast, int seq){
+		links.add(new LinkAck(id, broadcast, unicast, seq));
 	}
 
 	@Override
@@ -67,11 +71,13 @@ public class Ack extends Message<Ack> {
 		public final PeerId id;
 		public final boolean broadcast;
 		public final boolean unicast;
+		public final int seq;
 
-		private LinkAck(PeerId id, boolean broadcast, boolean unicast){
+		private LinkAck(PeerId id, boolean broadcast, boolean unicast, int seq){
 			this.id = id;
 			this.broadcast = broadcast;
 			this.unicast = unicast;
+			this.seq = seq;
 		}
 
 		private boolean serialise(Serialiser serialiser){
@@ -83,7 +89,11 @@ public class Ack extends Message<Ack> {
 				flags |= 2;
 			if (unicast)
 				flags |= 1;
+			if (seq>=0)
+				flags |= 4;
 			serialiser.putByte(flags);
+			if (seq>=0)
+				serialiser.putShort((short) seq);
 			return true;
 		}
 	}

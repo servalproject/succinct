@@ -113,4 +113,8 @@ public class Serialiser {
 		buff.clear();
 		return ret;
 	}
+
+	public void putShort(short value) {
+		buff.putShort(value);
+	}
 }

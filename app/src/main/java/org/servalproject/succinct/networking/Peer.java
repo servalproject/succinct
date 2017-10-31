@@ -102,6 +102,7 @@ public class Peer {
 				continue;
 
 			link.lastAckTime = SystemClock.elapsedRealtime();
+			link.lastAckSeq = linkAck.seq;
 			if (link.ackedUnicast != linkAck.unicast ||
 					link.ackedBroadcast != linkAck.broadcast) {
 				link.ackedUnicast = linkAck.unicast;
@@ -252,6 +253,8 @@ public class Peer {
 			networkLinks.put(addr, link);
 		}
 
+		link.lastHeard = now;
+		link.lastHeardSeq = hdr.seq;
 		if (hdr.unicast) {
 			link.unicastPackets++;
 			link.lastHeardUnicast = now;

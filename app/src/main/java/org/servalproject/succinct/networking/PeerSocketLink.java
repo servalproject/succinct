@@ -8,11 +8,13 @@ public class PeerSocketLink extends PeerLink {
 	public final IPInterface network;
 	public final SocketAddress addr;
 	public long lastHeard = -1;
+	public int lastHeardSeq = -1;
 	public long lastHeardUnicast =-1;
 	public long lastHeardBroadcast =-1;
 
 	// assume broadcasts are filtered until we hear an ack
 	public long lastAckTime=-1;
+	public int lastAckSeq = -1;
 	public boolean ackedUnicast=false;
 	public boolean ackedBroadcast=false;
 	public int unicastPackets=0;

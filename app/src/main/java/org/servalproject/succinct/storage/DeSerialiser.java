@@ -87,4 +87,8 @@ public class DeSerialiser {
 		}
 		return ret;
 	}
+
+	public short getShort() {
+		return buff.getShort();
+	}
 }
