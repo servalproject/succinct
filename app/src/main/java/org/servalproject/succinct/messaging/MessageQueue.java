@@ -723,7 +723,7 @@ public class MessageQueue {
 	}
 
 	private void receiveHttpFragments() {
-		if (SystemClock.elapsedRealtime() < nextLocationMessage)
+		if (SystemClock.elapsedRealtime() < nextHttpCheck)
 			return;
 
 		String baseUrl = getBaseUrl();
