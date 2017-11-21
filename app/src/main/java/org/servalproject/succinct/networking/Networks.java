@@ -28,9 +28,11 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Observable;
+import java.util.Set;
 
 public class Networks {
 	private static final int PORT = 4043;
@@ -75,6 +77,23 @@ public class Networks {
 		this.appContext = context;
 		this.nioLoop = new NioLoop(context);
 		this.myId = myId;
+
+		// add a list of known wifi interface names
+		knownWifi.add("wlan0");
+		knownWifi.add("tiwlan0");
+		knownWifi.add("p2p0");
+		knownWifi.add("ap0");
+		knownWifi.add("tiap0");
+		knownWifi.add("wl0.1");
+		knownWifi.add("wlp1s0");
+
+		for(String pref:new String[]{"wifi.interface",
+				"wifi.direct.interface",
+				"wifi.tethering.interface"}){
+			String value = System.getProperty(pref);
+			if (value!=null && !"".equals(value))
+				knownWifi.add(value);
+		}
 
 		InetSocketAddress addr = new InetSocketAddress(PORT);
 
@@ -214,6 +233,8 @@ public class Networks {
 		alarm.setAlarm(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime()+delay);
 	}
 
+	private Set<String> knownWifi = new HashSet<>();
+
 	// called from JNI
 	private void onAdd(String name, byte[] addr, byte[] broadcast, int prefixLen){
 		try {
@@ -221,7 +242,8 @@ public class Networks {
 			Log.v(TAG, "Add "+network);
 
 			// Only send broadcasts on 80211 interfaces
-			if (!new File("/sys/class/net/"+name+"/phy80211").exists())
+			if (!knownWifi.contains(name)
+					&& !new File("/sys/class/net/"+name+"/phy80211").exists())
 				return;
 
 			networks.put(name, network);
