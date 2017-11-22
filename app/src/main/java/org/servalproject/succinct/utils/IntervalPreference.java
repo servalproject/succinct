@@ -5,15 +5,22 @@ import android.content.Context;
 import android.os.Build;
 import android.preference.DialogPreference;
 import android.util.AttributeSet;
+import android.util.DisplayMetrics;
+import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
-import android.widget.TimePicker;
+import android.widget.LinearLayout;
+import android.widget.NumberPicker;
 
 import org.servalproject.succinct.R;
 
+import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
+
 public class IntervalPreference extends DialogPreference {
-	private TimePicker picker;
+	private NumberPicker hour;
+	private NumberPicker minute;
+	private NumberPicker second;
 	private long defaultValue;
-	private long scale;
 
 	@TargetApi(Build.VERSION_CODES.LOLLIPOP)
 	public IntervalPreference(Context context, AttributeSet attrs, int defStyleAttr) {
@@ -26,41 +33,60 @@ public class IntervalPreference extends DialogPreference {
 		this(context, attrs, android.R.attr.dialogPreferenceStyle);
 	}
 
-	public static long SCALE_SECONDS = 1000;
-	public static long SCALE_MINUTES = 1000*60;
-
-	public void setDefault(long defaultValue, long scale){
+	public void setDefault(long defaultValue){
 		this.defaultValue = defaultValue;
-		this.scale = scale;
 		setSummary(formatValue(getPersistedLong(defaultValue)));
+	}
+
+	private NumberPicker.Formatter twoDigits = new NumberPicker.Formatter() {
+		@Override
+		public String format(int i) {
+			return String.format("%02d", i);
+		}
+	};
+
+	private NumberPicker picker(Context context, int max){
+		NumberPicker p = new NumberPicker(context);
+		LinearLayout.LayoutParams parms = new LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT);
+		DisplayMetrics m = context.getResources().getDisplayMetrics();
+		int margin = (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6, m);
+		parms.setMarginStart(margin);
+		parms.setMarginEnd(margin);
+		p.setLayoutParams(parms);
+		p.setMinValue(0);
+		p.setMaxValue(max);
+		p.setFormatter(twoDigits);
+		return p;
 	}
 
 	@Override
 	protected View onCreateDialogView() {
-		// TODO use number pickers directly
-		picker = new TimePicker(getContext());
-		picker.setIs24HourView(true);
-		return picker;
+		Context context = getContext();
+		LinearLayout l = new LinearLayout(context);
+
+		hour = picker(context, 23);
+		minute = picker(context, 59);
+		second = picker(context, 59);
+
+		l.setOrientation(LinearLayout.HORIZONTAL);
+		l.setHorizontalGravity(Gravity.CENTER_HORIZONTAL);
+		l.addView(hour);
+		l.addView(minute);
+		l.addView(second);
+
+		return l;
 	}
 
 	@Override
 	protected void onBindDialogView(View view) {
 		super.onBindDialogView(view);
 
-		long value = getPersistedLong(defaultValue) / scale;
-
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-			picker.setMinute((int) (value%60));
-		}else{
-			picker.setCurrentMinute((int) (value%60));
-		}
+		long value = getPersistedLong(defaultValue) / 1000;
+		second.setValue((int) value%60);
 		value = (value - (value%60))/60;
-
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-			picker.setHour((int) value);
-		}else{
-			picker.setCurrentHour((int) value);
-		}
+		minute.setValue((int) value%60);
+		value = (value - (value%60))/60;
+		hour.setValue((int) value);
 	}
 
 	@Override
@@ -68,16 +94,11 @@ public class IntervalPreference extends DialogPreference {
 		super.onDialogClosed(positiveResult);
 
 		if (positiveResult) {
-			int hour;
-			int minute;
-			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-				hour = picker.getHour();
-				minute = picker.getMinute();
-			} else {
-				hour = picker.getCurrentHour();
-				minute = picker.getCurrentMinute();
-			}
-			long value = ((hour*60)+minute)*scale;
+			long value = (
+					(hour.getValue()*60 +
+					minute.getValue())*60 +
+					second.getValue()) * 1000;
+
 			persistLong(value);
 			setSummary(formatValue(value));
 		}

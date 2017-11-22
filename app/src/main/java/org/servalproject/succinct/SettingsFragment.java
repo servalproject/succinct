@@ -47,7 +47,7 @@ public class SettingsFragment extends PreferenceFragment implements SharedPrefer
         prefs = ((App)getActivity().getApplicationContext()).getPrefs();
 
         IntervalPreference locationInterval = (IntervalPreference) findPreference(App.LOCATION_INTERVAL);
-        locationInterval.setDefault(App.DefaultLocationInterval, IntervalPreference.SCALE_MINUTES);
+        locationInterval.setDefault(App.DefaultLocationInterval);
     }
 
     @Override
