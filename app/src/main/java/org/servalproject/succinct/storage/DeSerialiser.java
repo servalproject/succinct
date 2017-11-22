@@ -1,5 +1,7 @@
 package org.servalproject.succinct.storage;
 
+import org.servalproject.succinct.networking.Hex;
+
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -90,5 +92,13 @@ public class DeSerialiser {
 
 	public short getShort() {
 		return buff.getShort();
+	}
+
+	@Override
+	public String toString() {
+		int pos = buff.position();
+		String hex = Hex.toString(buff);
+		buff.position(pos);
+		return "{"+buff.position()+", "+buff.limit()+", "+hex+"}";
 	}
 }

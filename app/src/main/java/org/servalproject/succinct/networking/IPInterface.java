@@ -10,7 +10,7 @@ public class IPInterface implements Interface{
 	private final String name;
 	private final byte[] addrBytes;
 	private final byte[] broadcastAddrBytes;
-	private final InetAddress address;
+	final InetAddress address;
 	private final int prefixLength;
 	final InetAddress broadcastAddress;
 	public boolean up = true;

@@ -11,6 +11,7 @@ import org.servalproject.succinct.networking.messages.Header;
 import org.servalproject.succinct.networking.messages.Message;
 import org.servalproject.succinct.networking.messages.RequestTeam;
 import org.servalproject.succinct.networking.messages.StoreState;
+import org.servalproject.succinct.networking.messages.Stun;
 import org.servalproject.succinct.team.Team;
 import org.servalproject.succinct.utils.ChangedObservable;
 import org.servalproject.succinct.utils.WakeAlarm;
@@ -26,16 +27,18 @@ import java.nio.channels.DatagramChannel;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Observable;
 import java.util.Set;
 
 public class Networks {
-	private static final int PORT = 4043;
+	public static final int PORT = 4043;
 	public static final int HEARTBEAT_MS = 5000; // Network heartbeat
 	private static final String ALARM_ACTION = "org.servalproject.succinct.HEARTBEAT_ALARM";
 	private static final String TAG = "Networks";
@@ -178,19 +181,8 @@ public class Networks {
 	}
 
 	private void process(IPInterface network, SocketAddress addr, ByteBuffer buff) {
-		// first message should always be a Header
-		Header hdr = (Header)Message.parseMessage(buff);
-		if (hdr == null) {
-			Log.w(TAG, "Unable to parse header!");
-			return;
-		}
-		Peer peer = createPeer(hdr.id);
-		if (peer == null) {
-			// TODO double check that the packet came from one of our interfaces?
-			return;
-		}
-
-		PeerSocketLink link = peer.processHeader(network, addr, hdr);
+		Peer peer = null;
+		PeerSocketLink link = null;
 
 		while(buff.hasRemaining()){
 			Message msg = Message.parseMessage(buff);
@@ -198,14 +190,30 @@ public class Networks {
 				break;
 
 			switch (msg.type){
+				case HeaderMessage:
+					// first message should be a Header
+					Header hdr = (Header)msg;
+					peer = createPeer(hdr.id);
+					if (peer == null) {
+						// TODO double check that the packet came from one of our interfaces?
+						return;
+					}
+					link = peer.processHeader(network, addr, hdr);
+					break;
+				case StunMessage:
+					stunProbes.addAll(((Stun)msg).addresses);
+					break;
 				case AckMessage:
-					peer.processAck(myId, link, (Ack)msg);
+					if (link != null)
+						peer.processAck(myId, link, (Ack)msg);
 					break;
 				case StoreStateMessage:
-					processStoreState(peer, (StoreState)msg);
+					if (peer != null)
+						processStoreState(peer, (StoreState)msg);
 					break;
 			}
-			msg.process(peer);
+			if (peer != null)
+				msg.process(peer);
 		}
 	}
 
@@ -299,12 +307,25 @@ public class Networks {
 		return unicastLink;
 	}
 
+	private Set<SocketAddress> stunProbes = new HashSet<>();
+
 	private Runnable onAlarm = new Runnable() {
 		@Override
 		public void run() {
 
 			if (backgroundEnabled && !networks.isEmpty()) {
 				trimDead();
+
+				// walk the address range of each interface, and queue a single probe
+				for (IPInterface i : networks.values()) {
+					try {
+						stunProbes.add(new InetSocketAddress(i.nextAddress(), PORT));
+						stunProbes.remove(new InetSocketAddress(i.address, PORT));
+					} catch (UnknownHostException e) {
+						throw new IllegalStateException(e);
+					}
+				}
+
 				int seq = Networks.this.seq++;
 
 				Header hdr = new Header(myId, false, seq & 0xFFFF);
@@ -321,11 +342,15 @@ public class Networks {
 						if (l instanceof PeerSocketLink){
 							PeerSocketLink link = (PeerSocketLink)l;
 							ack.add(p, link);
+							// don't send duplicate probes to peers we already know
+							stunProbes.remove(link.addr);
 						}
 					}
 				}
 				if (!ack.links.isEmpty())
 					ack.write(buff);
+
+				// TODO send a broadcast stun message too?
 
 				StoreState state = null;
 				if (appContext.teamStorage != null)
@@ -338,10 +363,8 @@ public class Networks {
 					try {
 						//Log.v(TAG, "Heartbeat B "+i.broadcastAddress);
 						dgram.send(buff, new InetSocketAddress(i.broadcastAddress, PORT));
-					} catch (SecurityException se) {
+					} catch (SecurityException | IOException se) {
 						Log.e(TAG, se.getMessage(), se);
-					} catch (IOException e) {
-						Log.e(TAG, e.getMessage(), e);
 					}
 				}
 
@@ -363,30 +386,25 @@ public class Networks {
 					try {
 						//Log.v(TAG, "Heartbeat U "+link.addr);
 						dgram.send(buff, link.addr);
-					} catch (SecurityException se) {
+					} catch (SecurityException | IOException se) {
 						Log.e(TAG, se.getMessage(), se);
-					} catch (IOException e) {
-						Log.e(TAG, e.getMessage(), e);
 					}
 				}
 
-				// send one unicast probe per interface
 				buff.clear();
 				unicastHdr.write(buff);
 				buff.flip();
 
-				for (IPInterface i : networks.values()) {
+				// probe unicast addresses we have learnt about but not connected to.
+				for(SocketAddress probe : stunProbes){
 					try {
-						// TODO skip addresses for peers we already know about
-						InetAddress addr = i.nextAddress();
-						//Log.v(TAG, "Probe U "+addr);
-						dgram.send(buff, new InetSocketAddress(addr, PORT));
-					} catch (SecurityException se) {
+						//Log.v(TAG, "Probe U "+probe);
+						dgram.send(buff, probe);
+					} catch (SecurityException | IOException se) {
 						Log.e(TAG, se.getMessage(), se);
-					} catch (IOException e) {
-						Log.e(TAG, e.getMessage(), e);
 					}
 				}
+				stunProbes.clear();
 
 				setAlarm(HEARTBEAT_MS);
 			}

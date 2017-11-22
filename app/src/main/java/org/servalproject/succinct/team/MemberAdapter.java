@@ -80,7 +80,7 @@ public class MemberAdapter extends RecyclerView.Adapter<MemberAdapter.MemberHold
 		public void observe(Observable observable, Object o) {
 			try {
 				Peer p = (Peer)o;
-				if (list!=null && list.getPosition(p.id)>=0)
+				if (list!=null && list.getPosition(p.id)!=null)
 					notifyDataSetChanged();
 			} catch (IOException e) {
 				throw new IllegalStateException(e);

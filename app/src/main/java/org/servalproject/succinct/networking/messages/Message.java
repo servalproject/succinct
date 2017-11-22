@@ -38,6 +38,7 @@ public abstract class Message<T extends Message<T>> {
 		FileBlockMessage,
 		TeamMessage,
 		RequestTeamMessage,
+		StunMessage
 	}
 	private static Type[] types = Type.values();
 
@@ -48,8 +49,10 @@ public abstract class Message<T extends Message<T>> {
 		buff.mark();
 
 		int t = buff.get();
-		if (t >= types.length)
-			throw new IllegalStateException("Unexpected type "+t);
+		if (t >= types.length) {
+			Log.v(TAG, "Unexpected type " + t + " vs "+types.length);
+			return null;
+		}
 		Type type = types[t];
 
 		short len = buff.getShort();
@@ -79,6 +82,8 @@ public abstract class Message<T extends Message<T>> {
 					return Team.factory.create(serialiser);
 				case RequestTeamMessage:
 					return RequestTeam.factory.create(serialiser);
+				case StunMessage:
+					return Stun.factory.create(serialiser);
 			}
 			throw new IllegalStateException("Unexpected type!");
 		}catch (BufferUnderflowException e){
