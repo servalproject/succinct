@@ -247,10 +247,10 @@ public class Peer {
 
 			if (l instanceof PeerSocketLink) {
 				PeerSocketLink link = (PeerSocketLink) l;
-				if (!link.network.up || link.isDead()) {
+				if (link.isDead() || networkLinks.isEmpty() || (link.network!=null && !link.network.up)) {
 					died = true;
 					Log.v(TAG, "Dead peer link from "+link.addr+
-							" ("+link.network.up+
+							" ("+(link.network == null ? "null" : link.network.up)+
 							", "+link.heardBroadcast()+", "+link.heardUnicast()+")");
 					li.remove();
 					observable.notifyObservers(link);

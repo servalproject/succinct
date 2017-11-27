@@ -122,11 +122,6 @@ public class Networks {
 						break;
 					}
 				}
-				if (receiveInterface == null) {
-					Log.w(TAG, "Could not find valid interface for "+addr.getAddress());
-					return;
-				}
-
 				process(receiveInterface, addr, buff);
 			}
 		};
