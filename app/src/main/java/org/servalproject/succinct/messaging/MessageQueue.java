@@ -652,8 +652,6 @@ public class MessageQueue {
 		} catch (NumberFormatException | IOException e){
 			Log.e(TAG, e.getMessage(), e);
 		}
-
-		uploadFormDefinitions();
 	}
 
 	private void uploadFormDefinitions() {
@@ -703,6 +701,7 @@ public class MessageQueue {
 							if (read <= 0)
 								break;
 							out.write(buff, 0, read);
+							offset+=read;
 						}
 						out.close();
 						int response = connection.getResponseCode();
@@ -767,6 +766,8 @@ public class MessageQueue {
 		} catch (IOException e) {
 			throw new IllegalStateException(e);
 		}
+
+		uploadFormDefinitions();
 	}
 
 	private void sendNextFragment(){
