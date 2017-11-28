@@ -7,6 +7,7 @@ import android.preference.CheckBoxPreference;
 import android.preference.EditTextPreference;
 import android.preference.PreferenceFragment;
 
+import org.servalproject.succinct.messaging.RockPreference;
 import org.servalproject.succinct.utils.IntervalPreference;
 
 
@@ -57,5 +58,7 @@ public class SettingsFragment extends PreferenceFragment implements SharedPrefer
         setCheckbox(prefs, App.ENABLE_ROCK, true);
         setCheckbox(prefs, App.ENABLE_SMS, true);
         setCheckbox(prefs, App.ENABLE_HTTP, true);
+        RockPreference rock = (RockPreference)findPreference(App.PAIRED_ROCK);
+        rock.setSummary(prefs.getString(App.PAIRED_ROCK, null));
     }
 }
