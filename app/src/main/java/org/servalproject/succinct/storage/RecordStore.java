@@ -29,7 +29,7 @@ public class RecordStore {
 	private static final String TAG = "RecordStore";
 	private final File markFile;
 	private final Properties properties = new Properties();
-
+	public byte[] fileHash;
 	private native long open(long storePtr, String relativePath);
 	private native void append(long filePtr, byte[] bytes, int offset, int length);
 	private native int flush(long storePtr, long filePtr, byte[] expectedHash);
@@ -109,7 +109,7 @@ public class RecordStore {
 	}
 
 	// called from JNI on open or flush success / failure
-	private void jniCallback(long length){
+	private void jniCallback(long length, byte[] hash){
 		boolean notify = (EOF != -1 && length!=EOF);
 		if (appendOffset > length) {
 			try {
@@ -119,6 +119,7 @@ public class RecordStore {
 			}
 		}
 		appendOffset = EOF = length;
+		this.fileHash = hash;
 		if (notify) {
 			observable.notifyObservers();
 			store.fileFlushed(this);

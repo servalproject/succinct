@@ -498,8 +498,11 @@ static jint JNICALL jni_file_flush(JNIEnv *env, jobject object, jlong store_ptr,
     if (hash_length)
         env->GetByteArrayRegion(expectedHash, 0, hash_length, (jbyte *) hash);
     int ret = file_flush(state, file, hash, (size_t)hash_length);
-    if (ret!=0)
-        env->CallVoidMethod(object, jni_file_callback, (jlong)file->length);
+    if (ret!=0){
+        jbyteArray new_hash = env->NewByteArray(sizeof file->hash);
+        env->SetByteArrayRegion(new_hash, 0, sizeof file->hash, (const jbyte *) file->hash);
+        env->CallVoidMethod(object, jni_file_callback, (jlong)file->length, new_hash);
+    }
     if (ret==1)
         storage_callback(env, state);
     return (jint)ret;
@@ -587,7 +590,7 @@ int jni_register_storage(JNIEnv* env){
     jclass file = env->FindClass("org/servalproject/succinct/storage/RecordStore");
     if (env->ExceptionCheck())
         return -1;
-    jni_file_callback = env->GetMethodID(file, "jniCallback", "(J)V");
+    jni_file_callback = env->GetMethodID(file, "jniCallback", "(J[B)V");
     if (env->ExceptionCheck())
         return -1;
     env->RegisterNatives(file, file_methods, NELS(file_methods));
