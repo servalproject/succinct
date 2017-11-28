@@ -14,9 +14,9 @@ import java.util.Iterator;
 import java.util.Map;
 
 
-abstract class QueueWatcher<T> extends StorageWatcher<T> {
-	private final App app;
-	private final MessageQueue messageQueue;
+abstract class QueueWatcher<T> extends StorageWatcher<T> implements IMessageSource {
+	protected final App app;
+	protected final MessageQueue messageQueue;
 	private final HashMap<PeerId, RecordIterator<T>> queue = new HashMap<>();
 	private static final String TAG = "QueueWatcher";
 
@@ -52,11 +52,15 @@ abstract class QueueWatcher<T> extends StorageWatcher<T> {
 		}
 	}
 
-	boolean hasMessage() {
+	@Override
+	public boolean hasMessage() {
 		return !queue.isEmpty();
 	}
 
-	boolean nextMessage() throws IOException {
+	@Override
+	public boolean nextMessage() throws IOException {
+		if (!store.isTeamActive())
+			return false;
 		Iterator<Map.Entry<PeerId, RecordIterator<T>>> i = queue.entrySet().iterator();
 		while (i.hasNext()) {
 			Map.Entry<PeerId, RecordIterator<T>> e = i.next();
