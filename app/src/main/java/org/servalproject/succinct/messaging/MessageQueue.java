@@ -102,6 +102,7 @@ public class MessageQueue {
 		@Override
 		public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String s) {
 			onStateChanged();
+			httpRecvAlarm.setAlarm(AlarmManager.ELAPSED_REALTIME, WakeAlarm.NOW);
 		}
 	};
 
