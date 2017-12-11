@@ -112,6 +112,7 @@ public class MessageQueue {
 			String action = intent.getAction();
 			if (action.equals(ConnectivityManager.CONNECTIVITY_ACTION)){
 				httpRecvAlarm.setAlarm(AlarmManager.ELAPSED_REALTIME_WAKEUP, nextHttpCheck);
+				onStateChanged();
 			}
 		}
 	};
