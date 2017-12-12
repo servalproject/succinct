@@ -15,13 +15,11 @@ public class RecordIterator<T> {
 	}
 
 	public void start() {
-		current = null;
 		offset = 0;
 		recordLength = 0;
 	}
 
 	public void end() {
-		current = null;
 		offset = store.EOF;
 		recordLength = 0;
 	}
@@ -42,12 +40,10 @@ public class RecordIterator<T> {
 			throw new IllegalStateException();
 		this.offset = offset;
 		this.recordLength = 0;
-		current = null;
 		return offset;
 	}
 
 	public boolean next() throws IOException {
-		current = null;
 		offset+=recordLength;
 		if (offset>=store.EOF) {
 			recordLength = 0;
@@ -58,7 +54,6 @@ public class RecordIterator<T> {
 	}
 
 	public boolean prev() throws IOException {
-		current = null;
 		if (offset<=0) {
 			recordLength = 0;
 			return false;
@@ -68,24 +63,26 @@ public class RecordIterator<T> {
 		return offset>=0;
 	}
 
+	private long currentOffset = 0;
 	private T current = null;
 	public T read() throws IOException {
 		if (recordLength==0)
 			return null;
-		if (current!=null)
+		if (currentOffset == offset && current!=null)
 			return current;
 		byte[] bytes = new byte[recordLength - 8];
 		store.readBytes(offset+4, bytes);
 		current = factory.create(bytes);
+		currentOffset = offset;
 		return current;
 	}
 
 	public T readLast() throws IOException {
-		if (current != null && recordLength!=0 && offset + recordLength == store.EOF)
-			return current;
-		end();
-		if (!prev())
-			return null;
+		if (recordLength==0 || offset + recordLength != store.EOF){
+			end();
+			if (!prev())
+				return null;
+		}
 		return read();
 	}
 
