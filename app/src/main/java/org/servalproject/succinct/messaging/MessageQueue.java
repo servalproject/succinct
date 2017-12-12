@@ -52,7 +52,7 @@ public class MessageQueue {
 	private final IMessageSource[] messageSources;
 
 	private final MappedByteBuffer fragmentBuff;
-	private long fragmentDeadline;
+	private long fragmentDeadline = Long.MAX_VALUE;
 
 	private boolean closed = false;
 	private boolean monitoringActive = false;
@@ -127,7 +127,7 @@ public class MessageQueue {
 			if (size>0) {
 				nextFragmentSeq = fragmentBuff.getInt(4 + PeerId.LEN) + 1;
 				// since we're restarting, assume we should send any partial fragment now?
-				fragmentDeadline = SystemClock.elapsedRealtime();
+				fragmentDeadline = System.currentTimeMillis();
 			}
 			Log.v(TAG, "Reset fragment buffer to "+size);
 		}
@@ -177,6 +177,7 @@ public class MessageQueue {
 	private boolean endFragment() throws IOException {
 		if (fragmentBuff.position()<=4)
 			return false;
+		fragmentDeadline = Long.MAX_VALUE;
 		fragmentBuff.flip();
 		fragmentBuff.position(4);
 		byte[] fragmentBytes = new byte[fragmentBuff.remaining()];
@@ -189,6 +190,7 @@ public class MessageQueue {
 
 	private void beginFragment(int pieceLen) throws IOException {
 		int seq = nextFragmentSeq++;
+		fragmentDeadline = Long.MAX_VALUE;
 		fragmentBuff.clear();
 		fragmentBuff.position(4);
 		store.teamId.write(fragmentBuff);
@@ -231,13 +233,11 @@ public class MessageQueue {
 			if (len > MTU - HEADER)
 				len = MTU - HEADER;
 
-
-			if (fragmentBuff.position() <= 4) {
-				fragmentDeadline = deadline;
+			if (fragmentBuff.position() <= 4)
 				beginFragment((offset == -3) ? 0 : len);
-			}else if(deadline < fragmentDeadline){
+
+			if(deadline < fragmentDeadline)
 				fragmentDeadline = deadline;
-			}
 
 			if (len > fragmentBuff.remaining())
 				len = fragmentBuff.remaining();
@@ -271,84 +271,85 @@ public class MessageQueue {
 		return false;
 	}
 
-	boolean nextMessage(boolean flushNow) throws IOException {
-		// Look for something to send in priority order;
-		int seq = nextFragmentSeq;
-		if (fragmentBuff.position()<=4)
-			seq++;
-
-		// keep trying to pack more data into the current fragment, before ending it
-		for (int i=0; nextFragmentSeq <= seq && i<messageSources.length; i++){
-			messageSources[i].nextMessage();
-		}
-
-		if (nextFragmentSeq > seq)
+	boolean nextFragment(String markName, boolean flushNow) throws IOException {
+		fragments.reset(markName);
+		if (fragments.next())
 			return true;
 
-		if (fragmentBuff.position()<=4) {
+		// Look for something to send in priority order;
+		// keep trying to pack more data into the current fragment, before ending it
+		for (int i = 0; i < messageSources.length; i++) {
+			messageSources[i].nextMessage();
+			if (fragments.next())
+				return true;
+		}
+
+		if (fragmentBuff.position() <= 4) {
 			Log.v(TAG, "Message queue is empty");
 			return false;
 		}
 
-		long alarmTime = locationWatcher.adjustAlarm(fragmentDeadline);
-		if (alarmTime > System.currentTimeMillis() && !flushNow){
-			// Delay closing this fragment until the deadline of any message within it has elapsed
-			fragmentBuff.force();
-			Log.v(TAG, "Delaying close of last fragment");
-			alarm.setAlarm(AlarmManager.RTC_WAKEUP, alarmTime);
-			return false;
-		}
+		if (flushNow)
+			return true;
 
-		Log.v(TAG, "Deadline expired, closing last fragment");
-		return endFragment();
+		long alarmTime = locationWatcher.adjustAlarm(fragmentDeadline);
+		return alarmTime <= System.currentTimeMillis();
+	}
+
+	Fragment getFragment() throws IOException {
+		Fragment send = fragments.read();
+		if (send == null && endFragment() && fragments.next())
+			send = fragments.read();
+		return send;
 	}
 
 	private void sendNextFragment(){
 		try {
-			// Check if we have or can build a new fragment
-			if (!hasUnsent()){
-				// set the alarm for the next outgoing location message
-				long nextAlarm = locationWatcher.adjustAlarm(Long.MAX_VALUE);
-				if (nextAlarm != Long.MAX_VALUE)
-					alarm.setAlarm(AlarmManager.RTC_WAKEUP, nextAlarm);
-				return;
-			}
+			boolean init = false;
 
-			// Check that we have at least one service that is ready to deliver a fragment
 			int status = IMessaging.UNAVAILABLE;
-			for (int i = 0; i < services.length && status == IMessaging.UNAVAILABLE; i++){
-				status = services[i].checkAvailable();
-			}
-			if (status != IMessaging.SUCCESS) {
-				Log.v(TAG, "All services are busy or unavailable");
-				return;
-			}
-
-			// Now we can actually fragment the next message
-			// and try to send fragments
-
-			fragments.reset("sending");
-			while (true) {
-				if (!fragments.next()){
-					if (!(nextMessage(false) && fragments.next())) {
-						done();
-						break;
+			// Check if we have a fragment to send
+			while (nextFragment("sending", false)) {
+				if (!init) {
+					init = true;
+					// Check that we have at least one service that is ready to deliver a fragment
+					for (int i = 0; i < services.length && status == IMessaging.UNAVAILABLE; i++) {
+						status = services[i].checkAvailable();
+					}
+					if (status != IMessaging.SUCCESS) {
+						Log.v(TAG, "All services are busy or unavailable");
+						return;
 					}
 				}
+
+				// Now we can actually fragment the next message
+				// and try to send fragments
+
 				status = IMessaging.UNAVAILABLE;
 
-				Fragment send = fragments.read();
-				Log.v(TAG, "Attempting to send fragment @"+fragments.getOffset());
+				Fragment send = getFragment();
+				Log.v(TAG, "Attempting to send fragment @" + fragments.getOffset());
 
 				for (int i = 0; i < services.length && status == IMessaging.UNAVAILABLE; i++) {
 					status = services[i].trySend(send);
-					Log.v(TAG, "Service "+i+" returned "+status);
+					// TODO track transmission stats, show in UI?
+					Log.v(TAG, "Service " + i + " returned " + status);
 				}
 
 				if (status != IMessaging.SUCCESS)
-					break;
+					return;
+
+				fragments.next();
+				fragments.mark("sending");
 			}
-			fragments.mark("sending");
+
+			done();
+			// set the alarm for the next outgoing location message / fragment deadline
+			long nextAlarm = locationWatcher.adjustAlarm(fragmentDeadline);
+			if (nextAlarm != Long.MAX_VALUE)
+				alarm.setAlarm(AlarmManager.RTC_WAKEUP, nextAlarm);
+		}catch (RuntimeException e){
+			throw e;
 		}catch (Exception e){
 			throw new IllegalStateException(e);
 		}

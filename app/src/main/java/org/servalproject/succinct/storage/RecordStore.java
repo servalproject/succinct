@@ -80,7 +80,7 @@ public class RecordStore {
 		flushProperties();
 	}
 
-	long getMark(String name){
+	public long getMark(String name){
 		String value = (String)properties.get(name);
 		return (value == null ? 0 : Long.parseLong(value, 10));
 	}

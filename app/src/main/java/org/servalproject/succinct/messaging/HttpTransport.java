@@ -200,6 +200,10 @@ class HttpTransport {
 			if (fragment.seq == seq) {
 				fragments.next();
 				fragments.mark("http_acked");
+				// if we've acked beyond what we've sent via other transports,
+				// we can mark that offset as sent too
+				if (fragments.getOffset()>fragments.store.getMark("sending"))
+					fragments.mark("sending");
 				return;
 			}
 			if (!(forwards ? fragments.next() : fragments.prev()))
@@ -217,7 +221,8 @@ class HttpTransport {
 			RecordIterator<Fragment> fragments = queue.fragments;
 
 			fragments.reset("http_acked");
-			// If we've already acked them all, skip the connection to the server
+			// If we've already acked all existing fragments,
+			// we can skip the connection to the server
 			if (fragments.next()){
 				// double check the latest ack sequence with the server
 				URL url = new URL(baseUrl+"/succinct/api/v1/ack/"+store.teamId+"?key="+BuildConfig.directApiKey);
@@ -240,16 +245,8 @@ class HttpTransport {
 				}
 			}
 
-			while(true){
-				Fragment sendFragment = fragments.read();
-				if (sendFragment == null){
-					// If we reach the end of the fragment list, we can avoid other transports
-					fragments.mark("sending");
-					if (!(queue.nextMessage(true) && fragments.next())) {
-						break;
-					}
-					continue;
-				}
+			while(queue.nextFragment("http_acked", true)){
+				Fragment sendFragment = queue.getFragment();
 
 				URL url = new URL(baseUrl+"/succinct/api/v1/uploadFragment/"+store.teamId+"?key="+BuildConfig.directApiKey);
 				Log.v(TAG, "Connecting to "+url);
