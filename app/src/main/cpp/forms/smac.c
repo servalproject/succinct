@@ -254,9 +254,18 @@ int stats3_compress_model1_append(range_coder *c, const char *m_in, unsigned m_i
 
 int stats3_compress_uncompressed_append(range_coder *c, const char *m_in, unsigned m_in_len,
                                         stats_handle *h, double *entropyLog) {
-    // Encode bit by bit in case range coder is not on a byte boundary.
+    // As any of these encodes might trigger a rescale,
+    // we need to match the same order as decoding
+
+    // First the two ascii bit flags;
+    range_encode_equiprobable(c, 2, (m_in[0]&0x80) >> 7);
+    range_encode_equiprobable(c, 2, (m_in[0]&0x40) >> 6);
+    // Then the remainder of the first byte
+    range_encode_equiprobable(c, 64, m_in[0]&0x3f);
+
+    // Then encode the rest byte by byte
     unsigned i;
-    for (i = 0; i < m_in_len; i++)
+    for (i = 1; i < m_in_len; i++)
         range_encode_equiprobable(c, 256, m_in[i]);
 
     // Add $FF byte to terminate
