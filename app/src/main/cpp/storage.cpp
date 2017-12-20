@@ -50,6 +50,8 @@ struct dbstate{
     MDB_dbi index;
     struct root_state root;
     struct sync_state *sync_state;
+    unsigned keys;
+    unsigned deleted;
 };
 
 static jmethodID jni_file_callback;
@@ -269,6 +271,7 @@ static void init_sync_state(struct dbstate *state){
         return;
 
     state->sync_state = sync_alloc_state(state, has_callback, does_not_have_callback, now_has_callback, queue_message);
+    state->keys = state->deleted = 0;
 
     // add the current hash of every file
     MDB_cursor *curs;
@@ -280,6 +283,7 @@ static void init_sync_state(struct dbstate *state){
             if (val.mv_size == PERSIST_LEN) {
                 struct file_data *data = (file_data *) val.mv_data;
                 sync_add_key(state->sync_state, (const sync_key_t*)data->hash, NULL);
+                state->keys++;
             }
         }while(mdb_cursor_get(curs, &key, &val, MDB_NEXT)==0);
     }
@@ -414,12 +418,17 @@ static int file_flush(struct dbstate *state, struct file_data *file, const uint8
 
     // Now we can and must update the state of the file
     memcpy(&state->root, &new_root, sizeof new_root);
-    *file = new_data;
 
     if (state->sync_state) {
-        // TODO remove old sync keys?
-        sync_add_key(state->sync_state, (sync_key_t *) file->hash, NULL);
+        sync_add_key(state->sync_state, (sync_key_t *) new_data.hash, NULL);
+        state->keys++;
+        if (file->length > 0) {
+            state->deleted++;
+            // TODO remove old sync keys [periodically]?
+        }
     }
+
+    *file = new_data;
 
     LOGIF("flushed file %s, len %d", file->name, (int)file->length);
     return 1;
