@@ -19,10 +19,13 @@ public class ReceiveNewMagpiRecord extends BroadcastReceiver {
 			final String formSpecification =  intent.getStringExtra("formSpecification");
 			final Context appContext = context.getApplicationContext();
 
+			final PendingResult result = goAsync();
+
 			App.backgroundHandler.post(new Runnable() {
 				@Override
 				public void run() {
 					Form.compress(appContext, formSpecification, completedRecord);
+					result.finish();
 				}
 			});
 		}

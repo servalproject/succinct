@@ -33,7 +33,7 @@
             </intent-filter>
         </activity>
 
-        <receiver android:name=".forms.ReceiveNewMagpiRecord" >
+        <receiver android:name=".forms.ReceiveNewMagpiRecord" android:exported="true">
             <intent-filter>
                 <action android:name="org.servalproject.succinctdata.ReceiveNewMagpiRecord" />
             </intent-filter>

@@ -26,7 +26,7 @@ android {
     ext.gitDescribe = "git describe --always --dirty --tags".execute().text.trim();
 
     defaultConfig {
-        applicationId "org.servalproject.succinct"
+        applicationId "org.servalproject.sam"
         minSdkVersion 18
         targetSdkVersion 25
         versionCode commitCount
