@@ -7,6 +7,7 @@ import org.servalproject.succinct.App;
 import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.storage.DeSerialiser;
 import org.servalproject.succinct.storage.Factory;
+import org.servalproject.succinct.storage.RecordIterator;
 import org.servalproject.succinct.storage.RecordStore;
 import org.servalproject.succinct.storage.Serialiser;
 import org.servalproject.succinct.storage.TeamStorage;
@@ -16,6 +17,8 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Form {
 
@@ -74,22 +77,32 @@ public class Form {
 		}
 
 		long time = System.currentTimeMillis();
-		Stats stats = Stats.getInstance(context);
-		try{
-			Recipe recipe = new Recipe(formSpecification);
-			try{
-				byte[] compressed = recipe.compress(stats, completedRecord);
-				store.appendRecord(factory, app.networks.myId, new Form(time, compressed));
+		String stripped = Recipe.stripForm(completedRecord);
+		Map<String, String> fields = Recipe.parse(stripped);
+		String uuid = fields.get("uuid");
 
-				// store a copy of the form definition in a file
-				// (shouldn't matter who writes it first, the content should be the same)
-				RecordStore storeDefinition = store.openFile("forms/"+ Hex.toString(recipe.hash));
-				if (storeDefinition.EOF == 0){
-					storeDefinition.appendAt(0, formSpecification.getBytes("UTF-8"));
-					storeDefinition.flush(null);
+		try{
+			RecordIterator<Form> iterator = store.openIterator(factory, app.networks.myId);
+			if (iterator.store.getProperty(uuid) == null){
+				Log.v(TAG, "Compressing record "+uuid);
+				Recipe recipe = new Recipe(formSpecification);
+				try{
+					Stats stats = Stats.getInstance(context);
+					byte[] compressed = recipe.compress(stats, stripped);
+					iterator.append(new Form(time, compressed));
+					iterator.store.putProperty(uuid, "submitted");
+					// store a copy of the form definition in a file
+					// (shouldn't matter who writes it first, the content should be the same)
+					RecordStore storeDefinition = store.openFile("forms/"+ Hex.toString(recipe.hash));
+					if (storeDefinition.EOF == 0){
+						storeDefinition.appendAt(0, formSpecification.getBytes("UTF-8"));
+						storeDefinition.flush(null);
+					}
+				}finally {
+					recipe.close();
 				}
-			}finally {
-				recipe.close();
+			}else{
+				Log.v(TAG, "Ignored record "+uuid+", already sent");
 			}
 		} catch (IOException e) {
 			Log.e(TAG, e.getMessage(), e);

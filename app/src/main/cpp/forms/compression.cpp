@@ -72,16 +72,11 @@ static void close_recipe(JNIEnv *env, jobject object, jlong recipe_ptr){
     recipe_free((struct recipe *) recipe_ptr);
 }
 
-static jstring strip_form(JNIEnv *env, jobject object, jlong recipe_ptr, jstring form_instance){
-    struct recipe *recipe = (struct recipe *) recipe_ptr;
+static jstring strip_form(JNIEnv *env, jobject object, jstring form_instance){
     const char *instance = env->GetStringUTFChars(form_instance, NULL);
-
-    LOGIF("instance %s, %s", recipe->formname, instance);
 
     char stripped[0x10000] = "";
     int stripped_len = xml2stripped(NULL, instance, strlen(instance), stripped, sizeof(stripped));
-
-    LOGIF("stripped %s", stripped);
 
     env->ReleaseStringUTFChars(form_instance, instance);
     if (stripped_len<=0)
@@ -141,7 +136,7 @@ static JNINativeMethod stats_methods[] = {
 static JNINativeMethod recipe_methods[] = {
         {"buildRecipe", "(Ljava/lang/String;)V", (void*)build_recipe },
         {"closeRecipe", "(J)V", (void*)close_recipe },
-        {"stripForm", "(JLjava/lang/String;)Ljava/lang/String;", (void*)strip_form },
+        {"stripForm", "(Ljava/lang/String;)Ljava/lang/String;", (void*)strip_form },
         {"compressForm", "(JJLjava/lang/String;)[B", (void*)compress_form }
 };
 

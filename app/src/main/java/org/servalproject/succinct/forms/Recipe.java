@@ -2,6 +2,10 @@ package org.servalproject.succinct.forms;
 
 import android.util.Log;
 
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Map;
+
 public class Recipe {
 	private long ptr;
 	private String recipe;
@@ -10,7 +14,7 @@ public class Recipe {
 
 	private native void buildRecipe(String content);
 	private static native void closeRecipe(long ptr);
-	private static native String stripForm(long recipe, String instance);
+	public static native String stripForm(String instance);
 	private static native byte[] compressForm(long stats, long recipe, String strippedForm);
 
 	private static String TAG = "Recipe";
@@ -21,15 +25,24 @@ public class Recipe {
 	}
 
 	private void callback(String formName, byte[] hash, String recipe, long ptr){
-		Log.v(TAG, "Callback "+formName+", "+recipe);
 		this.formName = formName;
 		this.hash = hash;
 		this.recipe = recipe;
 		this.ptr = ptr;
 	}
 
-	public byte[] compress(Stats stats, String formInstance){
-		String stripped = stripForm(this.ptr, formInstance);
+	public static Map<String,String> parse(String stripped){
+		Map<String, String> ret = new HashMap<>();
+		for(String line : stripped.split("\n")){
+			int pos = line.indexOf('=');
+			String key = line.substring(0,pos);
+			String value = line.substring(pos+1);
+			ret.put(key, value);
+		}
+		return ret;
+	}
+
+	public byte[] compress(Stats stats, String stripped){
 		return compressForm(stats.ptr, this.ptr, stripped);
 	}
 
