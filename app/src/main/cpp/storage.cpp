@@ -1,5 +1,6 @@
 
 #include <string>
+#include <cstring>
 #include <android/log.h>
 #include <malloc.h>
 #include "lmdb/lmdb.h"
