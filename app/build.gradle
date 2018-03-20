@@ -1,4 +1,35 @@
+import groovy.swing.SwingBuilder;
+
 apply plugin: 'com.android.application'
+
+// based on https://www.timroes.de/2014/01/19/using-password-prompts-with-gradle-build-files/
+def readPassword(String fmt) {
+    def ret = ''
+    if (System.console() == null) {
+        new SwingBuilder().edt {
+            dialog(modal: true,
+                    title: 'Enter password',
+                    alwaysOnTop: true,
+                    resizable: false,
+                    locationRelativeTo: null,
+                    pack: true,
+                    show: true
+            ) {
+                vbox {
+                    label(text: fmt)
+                    input = passwordField()
+                    button(defaultButton: true, text: 'OK', actionPerformed: {
+                        ret = new String(input.password);
+                        dispose();
+                    })
+                }
+            }
+        }
+    } else {
+        ret = new String(System.console().readPassword("\n\$ $fmt"));
+    }
+    return ret;
+}
 
 def load(String filename) {
     def propFile = file(filename)
@@ -43,12 +74,32 @@ android {
         buildConfigField "String", "rockCallbackKey", "\"$rockCallbackKey\""
         buildConfigField "String", "smsDestination", "\"$smsDestination\""
     }
+
+    signingConfigs {
+        release {
+            storeFile = project.hasProperty("release.key.store") ?
+                    file(project.property("release.key.store")) : null
+            if (storeFile && !storeFile.exists())
+                storeFile = null;
+            // leave blank to force prompting the user
+            // but not null so that android thinks it is already configured
+            storePassword = ""
+            keyAlias = project.findProperty("release.key.alias")
+            keyPassword = ""
+            v2SigningEnabled = false
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // leave the apk unsigned for a release build if config is missing
+            if (signingConfigs.release.storeFile)
+                signingConfig signingConfigs.release
         }
     }
+
     externalNativeBuild {
         cmake {
             path "CMakeLists.txt"
@@ -71,3 +122,36 @@ dependencies {
     testImplementation 'junit:junit:4.12'
     implementation 'com.android.support:cardview-v7:27.1.0'
 }
+
+afterEvaluate {
+    android.applicationVariants.all { variant ->
+        def variantName = variant.name.capitalize()
+        // Prompt for key passwords, if the signing config came from this build file
+        // (Android studio gui has a way to trigger this from an external singing config)
+        if (project.tasks.findByName("install$variantName")) {
+            def promptTask = "prompt${variantName}Pwd"
+            task "$promptTask" {
+                doLast {
+                    if (variant.buildType.name != "debug"
+                            && variant.signingConfig
+                            && variant.signingConfig.storeFile
+                    ) {
+                        def signConfig = android.signingConfigs.findByName([variant.signingConfig.name]);
+                        if (signConfig != null) {
+                            if (signConfig.storeFile != null && signConfig.storeFile.exists()) {
+                                if (!signConfig.storePassword)
+                                    signConfig.storePassword = readPassword("Enter password for jar signing keystore:")
+                                if (!signConfig.keyPassword)
+                                    signConfig.keyPassword = readPassword("Enter password for jar signing key:")
+                            }
+                        }
+                    }
+                }
+            }
+            tasks["validateSigning${variantName}"].dependsOn "$promptTask"
+            // run the prompt task first as it doesn't work well with other parallel tasks
+            preBuild.mustRunAfter "$promptTask"
+        }
+    }
+}
+
