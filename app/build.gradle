@@ -126,6 +126,9 @@ dependencies {
 afterEvaluate {
     android.applicationVariants.all { variant ->
         def variantName = variant.name.capitalize()
+        variant.outputs.all { output ->
+            output.outputFileName = "Succinct-${variantName}-${variant.versionName}.apk"
+        }
         // Prompt for key passwords, if the signing config came from this build file
         // (Android studio gui has a way to trigger this from an external singing config)
         if (project.tasks.findByName("install$variantName")) {
