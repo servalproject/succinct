@@ -143,21 +143,29 @@ static JNINativeMethod recipe_methods[] = {
 int jni_register_compression(JNIEnv* env){
 
     jclass stats = env->FindClass("org/servalproject/succinct/forms/Stats");
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
+    }
     env->RegisterNatives(stats, stats_methods, NELS(stats_methods));
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
-
+    }
     jclass recipe = env->FindClass("org/servalproject/succinct/forms/Recipe");
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
+    }
     recipe_callback = env->GetMethodID(recipe, "callback", "(Ljava/lang/String;[BLjava/lang/String;J)V");
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
+    }
     env->RegisterNatives(recipe, recipe_methods, NELS(recipe_methods));
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
-
+    }
     return 0;
 }

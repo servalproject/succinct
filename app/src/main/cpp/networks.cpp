@@ -168,18 +168,24 @@ static JNINativeMethod networks_methods[] = {
 
 int jni_register_networks(JNIEnv* env){
     jclass networks = env->FindClass("org/servalproject/succinct/networking/Networks");
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
-
+    }
     jni_onAdd = env->GetMethodID(networks, "onAdd", "(Ljava/lang/String;[B[BI)V");
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
+    }
     jni_onRemove = env->GetMethodID(networks, "onRemove", "(Ljava/lang/String;[B[BI)V");
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
+    }
     env->RegisterNatives(networks, networks_methods, NELS(networks_methods));
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
-
+    }
     return 0;
 }

@@ -452,25 +452,37 @@ static void storage_callback(JNIEnv *env, struct dbstate *state){
 
 static jlong JNICALL jni_storage_open(JNIEnv *env, jobject object, jstring path)
 {
+    const char *filename;
+    int r;
     struct dbstate *state = (struct dbstate*)malloc(sizeof(struct dbstate));
+    if (!state)
+        goto error;
     memset(state, 0, sizeof *state);
-
     state->storage = env->NewGlobalRef(object);
-    const char *filename = env->GetStringUTFChars(path, NULL);
-    int r = open_db(state, filename);
-    if (r){
-        free(state);
-        state = NULL;
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        goto error;
     }
+    filename = env->GetStringUTFChars(path, NULL);
+    r = open_db(state, filename);
     env->ReleaseStringUTFChars(path, filename);
+    if (r)
+        goto error;
     storage_callback(env, state);
+    goto end;
+error:
+    if (state)
+        free(state);
+    state = NULL;
+end:
     return (jlong)state;
 }
 
 static void JNICALL jni_storage_close(JNIEnv *env, jobject object, jlong ptr)
 {
     struct dbstate *state = (struct dbstate *)ptr;
-    env->DeleteGlobalRef(state->storage);
+    if (state->storage)
+        env->DeleteGlobalRef(state->storage);
     close_db(state);
 }
 
@@ -480,7 +492,9 @@ static jlong JNICALL jni_file_open(JNIEnv *env, jobject object, jlong store_ptr,
     const char *filename = env->GetStringUTFChars(name, NULL);
     struct file_data *ret = file_open(state, filename);
     env->ReleaseStringUTFChars(name, filename);
-    env->CallVoidMethod(object, jni_file_callback, (jlong)ret->length);
+    jbyteArray new_hash = env->NewByteArray(sizeof ret->hash);
+    env->SetByteArrayRegion(new_hash, 0, sizeof ret->hash, (const jbyte *) ret->hash);
+    env->CallVoidMethod(object, jni_file_callback, (jlong)ret->length, new_hash);
     return (jlong)ret;
 }
 
@@ -587,39 +601,55 @@ static JNINativeMethod peer_methods[] = {
 
 int jni_register_storage(JNIEnv* env){
     jclass store = env->FindClass("org/servalproject/succinct/storage/Storage");
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
-
+    }
     jni_store_callback = env->GetMethodID(store, "jniCallback", "([B)V");
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
+    }
     env->RegisterNatives(store, storage_methods, NELS(storage_methods));
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
-
+    }
     jclass file = env->FindClass("org/servalproject/succinct/storage/RecordStore");
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
+    }
     jni_file_callback = env->GetMethodID(file, "jniCallback", "(J[B)V");
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
+    }
     env->RegisterNatives(file, file_methods, NELS(file_methods));
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
-
+    }
     jclass peer = env->FindClass("org/servalproject/succinct/networking/Peer");
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
+    }
     jni_sync_message = env->GetMethodID(peer, "syncMessage", "([B)V");
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
+    }
     jni_peer_has = env->GetMethodID(peer, "peerHas", "([BLjava/lang/String;J)V");
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
+    }
     env->RegisterNatives(peer, peer_methods, NELS(peer_methods));
-    if (env->ExceptionCheck())
+    if (env->ExceptionCheck()) {
+        env->ExceptionDescribe();
         return -1;
-
+    }
     return 0;
 }
 
