@@ -309,11 +309,15 @@ static int recipe_encode_field(struct recipe *recipe, stats_handle *stats, range
 
     switch (recipe->fields[fieldnumber].type) {
         case FIELDTYPE_INTEGER:
-            normalised_value = atoi(value) - recipe->fields[fieldnumber].minimum;
             minimum = recipe->fields[fieldnumber].minimum;
             maximum = recipe->fields[fieldnumber].maximum;
             if (maximum <= minimum) {
                 LOGI("Illegal range: min=%d, max=%d", minimum, maximum);
+                return -1;
+            }
+            normalised_value = atoi(value) - minimum;
+            if (normalised_value < 0 || normalised_value > maximum){
+                LOGI("Failed to convert integer %s, to fit within range; min=%d, max=%d", value, minimum, maximum);
                 return -1;
             }
             return range_encode_equiprobable(c, maximum - minimum + 1, normalised_value);
