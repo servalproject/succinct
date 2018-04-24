@@ -97,6 +97,8 @@ static jbyteArray compress_form(JNIEnv *env, jobject object, jlong stats_ptr, jl
     int succinct_len = recipe_compress(h, recipe, stripped, strlen(stripped), succinct, sizeof(succinct));
 
     env->ReleaseStringUTFChars(stripped_form, stripped);
+    if (succinct_len<0)
+        return NULL;
 
     jbyteArray compressed = env->NewByteArray(succinct_len);
     env->SetByteArrayRegion(compressed, 0, succinct_len, (const jbyte *) succinct);

@@ -447,7 +447,8 @@ static int recipe_encode_field(struct recipe *recipe, stats_handle *stats, range
             }
             return range_encode_equiprobable(c, maximum - minimum + 1, normalised_value);
         case FIELDTYPE_LATLONG:
-            if (sscanf(value, "%f %f", &lat, &lon) != 2) return -1;
+            if (sscanf(value, "%f %f", &lat, &lon) != 2
+             && sscanf(value, "%f,%f", &lat, &lon) != 2) return -1;
             if (lat < -90 || lat > 90 || lon < -180 || lon > 180) return -1;
             ilat = lroundf(lat);
             ilon = lroundf(lon);

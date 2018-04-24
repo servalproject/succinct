@@ -43,7 +43,10 @@ public class Recipe {
 	}
 
 	public byte[] compress(Stats stats, String stripped){
-		return compressForm(stats.ptr, this.ptr, stripped);
+		byte[] ret = compressForm(stats.ptr, this.ptr, stripped);
+		if (ret == null)
+			throw new IllegalStateException("Failed to compress form");
+		return ret;
 	}
 
 	void close(){
