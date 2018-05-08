@@ -49,9 +49,11 @@ public class RequestTeam extends Message<RequestTeam> {
 		App app = peer.appContext;
 		if (app.teamStorage == null)
 			return;
+		if (!app.teamStorage.teamId.equals(teamId))
+			return;
 		try {
 			Team myTeam = app.teamStorage.getTeam();
-			if (myTeam!=null && myTeam.id.equals(teamId))
+			if (myTeam!=null && myTeam.id!=null)
 				peer.getConnection().queue(myTeam);
 		} catch (IOException e) {
 			Log.e(TAG, e.getMessage(), e);
