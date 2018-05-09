@@ -1,6 +1,3 @@
-#ifndef SUCCINCT_CHARSET_H
-#define SUCCINCT_CHARSET_H
-
 /*
 Copyright (C) 2012 Paul Gardner-Stephen
  
@@ -18,6 +15,9 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
+
+#ifndef SUCCINCT_CHARSET_H
+#define SUCCINCT_CHARSET_H
 
 #define CHARCOUNT 65
 #define PRINTABLECHARCOUNT (CHARCOUNT-2+26+10)

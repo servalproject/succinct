@@ -1,12 +1,15 @@
 #include <string.h>
 #include "compression.h"
+
+extern "C" {
 #include "recipe.h"
 #include "log.h"
 #include "smac.h"
+}
+
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
-
-#define LOGIF(X, ...) __android_log_print(ANDROID_LOG_INFO, "CompressionJNI", X, ##__VA_ARGS__)
+#include <malloc.h>
 
 jmethodID recipe_callback;
 
@@ -18,7 +21,7 @@ static jlong open_stats(JNIEnv *env, jobject object, jobject asset_manager, jstr
     off_t len = AAsset_getLength(a);
     const uint8_t *buff = (const uint8_t *) AAsset_getBuffer(a);
 
-    stats_handle *h = stats_map_file(buff, (size_t)len);
+    stats_handle *h = stats_mapped_file(buff, (size_t)len);
     h->reserved = a;
 
     stats_load_tree(h);
@@ -34,17 +37,13 @@ static void close_stats(JNIEnv *env, jobject object, jlong stats_ptr){
 }
 
 static void build_recipe(JNIEnv *env, jobject object, jstring form_spec){
-    char form_name[1024] = "";
-    char recipe_text[0x10000] = "";
-    size_t recipe_len = sizeof recipe_text;
-
     const char *specification = env->GetStringUTFChars(form_spec, NULL);
+    char *recipe_text[1024];
+    char *form_names[1024];
+    bzero(recipe_text, sizeof recipe_text);
+    bzero(form_names, sizeof form_names);
 
-    int r = xhtmlToRecipe(specification,
-                          NULL, 0,
-                          form_name, sizeof form_name,
-                          recipe_text, &recipe_len,
-                          NULL, NULL);
+    int r = xhtmlToRecipe(specification, NULL, (char **) &recipe_text, (char **) &form_names);
 
     env->ReleaseStringUTFChars(form_spec, specification);
 
@@ -52,24 +51,36 @@ static void build_recipe(JNIEnv *env, jobject object, jstring form_spec){
         // TODO throw?
         return;
 
-    struct recipe *recipe = recipe_read(form_name, recipe_text, recipe_len);
+    int i,count;
+    for (count=0;count<1024;count++) {
+        if (!recipe_text[count])
+            break;
+    }
+    struct recipe **recipies = (struct recipe **)malloc((count+1) * sizeof(struct recipe *));
+    for (i=0;i<count;i++) {
+        recipies[i] = recipe_read(form_names[i], recipe_text[i], (int)strlen(recipe_text[i]));
+        free(recipe_text[i]);
+        free(form_names[i]);
+    }
+    recipies[count] = NULL;
 
-    if (!recipe)
-        // TODO throw?
-        return;
+    if (count>0){
+        jbyteArray hash = env->NewByteArray(sizeof recipies[0]->formhash);
+        env->SetByteArrayRegion(hash, 0, sizeof recipies[0]->formhash, (const jbyte *) recipies[0]->formhash);
 
-    jbyteArray hash = env->NewByteArray(sizeof recipe->formhash);
-    env->SetByteArrayRegion(hash, 0, sizeof recipe->formhash, (const jbyte *) recipe->formhash);
-
-    env->CallVoidMethod(object, recipe_callback,
-                        env->NewStringUTF(form_name),
-                        hash,
-                        env->NewStringUTF(recipe_text),
-                        (jlong)recipe);
+        env->CallVoidMethod(object, recipe_callback,
+                            hash,
+                            (jlong)recipies);
+    }
 }
 
 static void close_recipe(JNIEnv *env, jobject object, jlong recipe_ptr){
-    recipe_free((struct recipe *) recipe_ptr);
+    struct recipe **recipies =(struct recipe **) recipe_ptr;
+    int i;
+    for (i=0;recipies[i];i++){
+        recipe_free(recipies[i]);
+    }
+    free(recipies);
 }
 
 static jstring strip_form(JNIEnv *env, jobject object, jstring form_instance){
@@ -86,15 +97,26 @@ static jstring strip_form(JNIEnv *env, jobject object, jstring form_instance){
     return env->NewStringUTF(stripped);
 }
 
+struct recipe *lookup_recipe(const char *formid, void *context){
+    struct recipe **recipies = (struct recipe **) context;
+    int i;
+    for(i;recipies[i];i++){
+        if (strcmp(recipies[i]->formname,formid)==0){
+            return recipies[i];
+        }
+    }
+    return NULL;
+}
+
 static jbyteArray compress_form(JNIEnv *env, jobject object, jlong stats_ptr, jlong recipe_ptr, jstring stripped_form){
-    struct recipe *recipe = (struct recipe *) recipe_ptr;
+    struct recipe **recipies = (struct recipe **) recipe_ptr;
     stats_handle *h = (stats_handle *)stats_ptr;
 
     const char *stripped = env->GetStringUTFChars(stripped_form, NULL);
 
     uint8_t succinct[1024];
 
-    int succinct_len = recipe_compress(h, recipe, stripped, strlen(stripped), succinct, sizeof(succinct));
+    int succinct_len = recipe_compress(h, lookup_recipe, recipies, recipies[0], stripped, strlen(stripped), succinct, sizeof(succinct));
 
     env->ReleaseStringUTFChars(stripped_form, stripped);
     if (succinct_len<0)
@@ -113,7 +135,7 @@ static jbyteArray compress_string(JNIEnv *env, jobject object, jlong stats_ptr, 
 
     unsigned in_len = strlen(string);
     uint8_t buff[in_len];
-    unsigned len = sizeof buff;
+    int len = sizeof buff;
 
     int r = stats3_compress(string, in_len, buff, &len, h);
     if (r != 0) {
@@ -159,7 +181,7 @@ int jni_register_compression(JNIEnv* env){
         env->ExceptionDescribe();
         return -1;
     }
-    recipe_callback = env->GetMethodID(recipe, "callback", "(Ljava/lang/String;[BLjava/lang/String;J)V");
+    recipe_callback = env->GetMethodID(recipe, "callback", "([BJ)V");
     if (env->ExceptionCheck()) {
         env->ExceptionDescribe();
         return -1;

@@ -8,9 +8,7 @@ import java.util.Map;
 
 public class Recipe {
 	private long ptr;
-	private String recipe;
 	byte[] hash;
-	String formName;
 
 	private native void buildRecipe(String content);
 	private static native void closeRecipe(long ptr);
@@ -24,10 +22,8 @@ public class Recipe {
 		buildRecipe(content);
 	}
 
-	private void callback(String formName, byte[] hash, String recipe, long ptr){
-		this.formName = formName;
+	private void callback(byte[] hash, long ptr){
 		this.hash = hash;
-		this.recipe = recipe;
 		this.ptr = ptr;
 	}
 
@@ -51,7 +47,8 @@ public class Recipe {
 
 	void close(){
 		Log.v(TAG, "closeRecipe");
-		closeRecipe(ptr);
+		if (ptr!=0)
+			closeRecipe(ptr);
 		ptr = 0;
 	}
 }

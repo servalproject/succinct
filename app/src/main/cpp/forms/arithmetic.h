@@ -19,6 +19,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #ifndef SUCCINCT_ARITHMETIC_H
 #define SUCCINCT_ARITHMETIC_H
 
+#define MAXVALUE 0xffffff
+#define MAXVALUEPLUS1 (MAXVALUE+1)
+
 typedef struct range_coder {
   unsigned int low;
   unsigned int high;
@@ -38,14 +41,23 @@ typedef struct range_coder {
   unsigned int bits_used;
 } range_coder;
 
+int range_coder_reset(struct range_coder *c);
+int range_emit_stable_bits(range_coder *c);
 int range_encode(range_coder *c,unsigned int p_low,unsigned int p_high);
+int range_status(range_coder *c,int decoderP);
 int range_encode_symbol(range_coder *c,unsigned int frequencies[],int alphabet_size,int symbol);
 int range_encode_equiprobable(range_coder *c,int alphabet_size,int symbol);
 int range_decode_equiprobable(range_coder *c,int alphabet_size);
+int range_decode_common(range_coder *c,unsigned int p_low,unsigned int p_high,int s);
 int range_decode_symbol(range_coder *c,unsigned int frequencies[],int alphabet_size);
+int range_decode_getnextbit(range_coder *c);
 struct range_coder *range_new_coder(int bytes);
+int range_encode_length(range_coder *c,int len);
 int range_conclude(range_coder *c);
 int range_coder_free(range_coder *c);
+range_coder *range_coder_dup(range_coder *in);
+int range_rescale(range_coder *c);
+int range_unrescale_value(unsigned int v,int underflow_bits);
 int range_decode_prefetch(range_coder *c);
 
 int ic_encode_recursive(int *list,
@@ -56,5 +68,10 @@ int ic_decode_recursive(int *list,
 			int list_length,
 			int max_value,
 			range_coder *c);
+
+char *asbits(unsigned int v);
+int _range_check(range_coder *c,int line);
+#define range_check(C) _range_check(C, __LINE__)
+char *range_coder_lastbits(range_coder *c,int count);
 
 #endif

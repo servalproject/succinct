@@ -16,32 +16,17 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-#ifndef SUCCINCT_SMAC_H
-#define SUCCINCT_SMAC_H
+int stats3_compress(const char *in,int inlen,unsigned char *out, int *outlen,
+		    stats_handle *h);
+int stats3_compress_bits(range_coder *c,const char *m,int len,stats_handle *h,
+			 double *entropyLog);
+int stats3_compress_append(range_coder *c,const char *m_in,int m_in_len,
+			   stats_handle *h,double *entropyLog);
+int stats3_decompress(const unsigned char *in,int inlen,char *out, int *outlen,
+		      stats_handle *h);
+int stats3_decompress_bits(range_coder *c,char *m,int *len_out,
+			   stats_handle *h,double *entropyLog);
 
-#include "arithmetic.h"
+int decodePackedASCII(range_coder *c, char *m,int encodedLength);
+int encodePackedASCII(range_coder *c, const char *m);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-int stats3_compress(const char *in, unsigned inlen, unsigned char *out, unsigned *outlen,
-                    stats_handle *h);
-
-int stats3_compress_bits(range_coder *c, const char *m, unsigned len, stats_handle *h,
-                         double *entropyLog);
-
-int stats3_compress_append(range_coder *c, const char *m_in, unsigned m_in_len,
-                           stats_handle *h, double *entropyLog);
-
-int stats3_decompress(const unsigned char *in, unsigned inlen, char *out, unsigned *outlen,
-                      stats_handle *h);
-
-int stats3_decompress_bits(range_coder *c, char *m, unsigned *len_out,
-                           stats_handle *h, double *entropyLog);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif

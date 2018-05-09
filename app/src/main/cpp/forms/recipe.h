@@ -2,7 +2,10 @@
 #define SUCCINCT_RECIPE_H
 
 #include <stdint.h>
+#include <stdbool.h>
+
 #include "packed_stats.h"
+#include "arithmetic.h"
 
 // min,max set inclusive bound
 #define FIELDTYPE_INTEGER 0
@@ -34,46 +37,92 @@
 // Like time of day, but takes a particular string format of date
 // (a slightly different format for magpi)
 #define FIELDTYPE_MAGPITIMEDATE 12
+// Like _ENUM, but allows multiple choices to be selected
+#define FIELDTYPE_MULTISELECT 13
+// For Magpi sub-forms
+#define FIELDTYPE_SUBFORM 14
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#define MAX_ENUM_VALUES 32
+
+struct enum_value{
+  struct enum_value *next;
+  char value[];
+};
 
 struct field {
-	char *name;
-	int type;
-	int minimum;
-	int maximum;
-	int precision; // meaning differs based on field type
-	char *enum_values[32];
-	int enum_count;
+  struct field *next;
+  int type;
+  int minimum;
+  int maximum;
+  int precision; // meaning differs based on field type
+  struct enum_value *enum_value;
+  int enum_count;
+  char name[];
 };
 
 struct recipe {
-	char formname[1024];
-	unsigned char formhash[6];
-	struct field fields[1024];
-	int field_count;
+  unsigned char formhash[6];
+  struct field *field_list;
+  int field_count;
+  char formname[];
 };
 
+
+struct record_field {
+  char *key;
+  char *value;
+  struct record *subrecord;
+};
+
+#define MAX_FIELDS 1024
+struct record {
+  int field_count;
+  struct record_field fields[MAX_FIELDS];
+  struct record *parent;
+};
+
+typedef struct recipe *(*find_recipe) (const char *formid, void *data);
+
+int record_free(struct record *r);
+struct record *parse_stripped_with_subforms(const char *in,int in_len);
+
+int recipe_create(const char *input);
+int xhtml_recipe_create(const char *recipe_dir, const char *input);
+struct recipe *recipe_read_from_file(const char *filename);
+struct recipe *recipe_read(const char *formname,const char *buffer,int buffer_size);
 void recipe_free(struct recipe *recipe);
+int recipe_load_file(const char *filename, char *out, int out_size);
+struct recipe *recipe_read_from_specification(const char *xmlform_c);
+struct recipe *recipe_find_recipe(const char *recipe_dir, const unsigned char *formhash);
 
-struct recipe *recipe_read(char *formname, char *buffer, int buffer_size);
+int recipe_parse_fieldtype(const char *name);
+const char *recipe_field_type_name(int f);
 
-int recipe_compress(stats_handle *h, struct recipe *recipe,
-					const char *in, int in_len, unsigned char *out, int out_size);
+int recipe_compress_file(stats_handle *h, const char *recipe_dir, const char *input_file, const char *output_file);
+int encryptAndFragment(const char *filename, int mtu, const char *outputdir, const char *publickeyhex);
+int recipe_encode_field(struct field *field, stats_handle *stats, range_coder *c, const char *value);
+int compress_record_with_subforms(find_recipe find_recipe, void *context, struct recipe *recipe,
+				  struct record *r, range_coder *c, stats_handle *h);
+int recipe_compress(stats_handle *h, find_recipe find_recipe, void *context, struct recipe *recipe,
+                    const char *in, int in_len, unsigned char *out, int out_size);
 
-int xhtmlToRecipe(const char *xmltext,
-				  char *formname, size_t name_len,
-				  char *formversion, size_t version_len,
-				  char *recipetext, size_t *recipeLen,
-				  char *templatetext, size_t *templateLen);
+int recipe_decompress_file(stats_handle *h, const char *recipe_dir, const char *input_file,
+                           const char *output_directory);
+int defragmentAndDecrypt(const char *inputdir, const char *outputdir, const char *passphrase);
+int recipe_decompress(stats_handle *h, struct recipe *recipe, const char *recipe_dir,
+                      char *out, int out_size, char *recipe_name,
+                      range_coder *c, bool is_subform, bool is_record);
 
-int xml2stripped(const char *form_name, const char *xml, size_t xml_len,
-				 char *stripped, size_t stripped_size);
+//int stripped2xml(const char *stripped,int stripped_len,const char *template,int template_len,char *xml,int xml_size);
+int xml2stripped(const char *form_name, const char *xml,int xml_len,char *stripped,int stripped_size);
 
-#ifdef __cplusplus
-}
-#endif
+int generateMaps(const char *recipeDir, const char *outputDir);
+
+int xhtmlToRecipe(const char *xmltext, char **template_text, char *recipe_text[1024], char *form_versions[1024]);
+
+int xmlToRecipe(const char *xmltext,int size,char *formname,char *formversion,
+		char *recipetext,int *recipeLen,
+		char *templatetext,int *templateLen);
+
 
 #endif

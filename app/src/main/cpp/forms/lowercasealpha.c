@@ -16,6 +16,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+
 #ifndef COMMON_DEFS
 #define COMMON_DEFS
 
@@ -34,12 +35,12 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 int strncmp816(char *s1,unsigned short *s2,int len)
 {
-    int j;
-    for(j=0;j<len;j++) {
-        int d=(unsigned char)s1[j]-(unsigned short)s2[j];
-        if (d) return d;
-    }
-    return 0;
+  int j;
+  for(j=0;j<len;j++) {
+    int d=(unsigned char)s1[j]-(unsigned short)s2[j];
+    if (d) return d;
+  }	  
+  return 0;
 }
 
 #endif
@@ -114,6 +115,8 @@ int FUNC(LCAlphaSpace)(range_coder *c,unsigned short *s,int length,stats_handle 
       double unicodeEntropy=c->entropy-before;
       //      fprintf(stderr,"encoded 0x%04x in %.2f bits\n",
       //	      s[o],unicodeEntropy);
+      h->total_unicode_millibits+=unicodeEntropy*1000;
+      h->total_unicode_chars++;
 #else
       if (firstUnicode) {
 	firstUnicode=0;

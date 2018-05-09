@@ -16,6 +16,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
+
 #ifndef COMMON_DEFS
 #define COMMON_DEFS
 
@@ -33,31 +34,31 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 int stripCase(unsigned short *in,int in_len,unsigned short *out)
 {
-	int l=0;
-	int i;
-	for(i=0;i<in_len;i++) {
-		if (in[i]<0x80)
-			out[l++]=tolower(in[i]);
-		else out[l++]=in[i];
-	}
-	return 0;
+  int l=0;
+  int i;
+  for(i=0;i<in_len;i++) {
+    if (in[i]<0x80)
+      out[l++]=tolower(in[i]);
+    else out[l++]=in[i];
+  }
+  return 0;
 }
 
 int mungeCase(unsigned short *m,int len)
 {
-	int i;
+  int i;
 
-	/* Change isolated I's to i, provided preceeding char is lower-case
-       (so that we don't mess up all-caps).
-    */
-	for(i=1;i<(len-1);i++)
-		if (m[i]<0x80)
-			if (tolower(m[i])=='i'&&(!isalpha(m[i-1]))&&(!isalpha(m[i+1])))
-			{
-				m[i]^=0x20;
-			}
-
-	return 0;
+  /* Change isolated I's to i, provided preceeding char is lower-case
+     (so that we don't mess up all-caps).
+  */
+  for(i=1;i<(len-1);i++)
+    if (m[i]<0x80)
+      if (tolower(m[i])=='i'&&(!isalpha(m[i-1]))&&(!isalpha(m[i+1])))
+	{
+	  m[i]^=0x20;
+	}
+     
+  return 0;
 }
 
 #endif
