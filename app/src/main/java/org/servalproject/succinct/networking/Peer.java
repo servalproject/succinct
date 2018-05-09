@@ -78,6 +78,7 @@ public class Peer {
 				try {
 					if (l instanceof PeerSocketLink){
 						PeerSocketLink link = (PeerSocketLink)l;
+						Log.v(TAG, "Initiating connection");
 						connection = appContext.networks.connectLink(this, link);
 						break;
 					}
@@ -89,10 +90,24 @@ public class Peer {
 		return connection;
 	}
 
-	public void setConnection(PeerConnection connection){
-		// TODO try to keep only one active connection?
-		if (this.connection!=null)
+	public synchronized void setConnection(PeerConnection connection){
+		if (this.connection == connection)
+			return;
+
+		if (this.connection!=null) {
+			if (connection!=null && connection.initiated != this.connection.initiated && !this.connection.shutdown) {
+				int cmp = appContext.networks.myId.compare(id);
+				if (connection.initiated)
+					cmp = -cmp;
+				if (cmp<0) {
+					Log.v(TAG, "Shutdown due to *not* replacing connection");
+					connection.shutdown();
+					return;
+				}
+			}
+			Log.v(TAG, "Shutdown due to replacing connection");
 			this.connection.shutdown();
+		}
 		this.connection = connection;
 	}
 
@@ -149,6 +164,7 @@ public class Peer {
 
 	// from JNI, send these bytes to this peer so they can process them
 	private void syncMessage(byte[] message){
+		Log.v(TAG, "Queue "+Hex.toString(message));
 		getConnection().queue(new SyncMsg(message));
 	}
 
@@ -159,6 +175,9 @@ public class Peer {
 		try{
 			RecordStore file = appContext.teamStorage.openFile(filename);
 			if (length <= file.EOF)
+				return;
+			PeerTransfer active = file.activeTransfer;
+			if (active!=null && length <= active.newLength)
 				return;
 			possibleTransfers.add(new PeerTransfer(this, file, filename, length, hash));
 			observable.notifyObservers();
@@ -194,7 +213,9 @@ public class Peer {
 	private native long processSyncMessage(long ptr, long syncState, byte[] message);
 
 	public void processSyncMessage(byte[] message){
-		syncState = processSyncMessage(appContext.teamStorage.ptr, syncState, message);
+		Log.v(TAG, "Process "+Hex.toString(message));
+		if (appContext.teamStorage!=null)
+			syncState = processSyncMessage(appContext.teamStorage.ptr, syncState, message);
 	}
 
 	public void processRequest(RequestBlock request){
@@ -258,6 +279,7 @@ public class Peer {
 			}
 		}
 		if (died && networkLinks.isEmpty() && this.connection!=null){
+			Log.v(TAG, "Shutdown due to dead link");
 			this.connection.shutdown();
 			this.connection = null;
 		}

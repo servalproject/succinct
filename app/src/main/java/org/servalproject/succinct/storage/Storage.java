@@ -1,5 +1,7 @@
 package org.servalproject.succinct.storage;
 
+import android.util.Log;
+
 import org.servalproject.succinct.App;
 import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.networking.PeerId;
@@ -47,7 +49,9 @@ public class Storage {
 
 	private void jniCallback(byte[] rootHash){
 		state = new StoreState(teamId, rootHash);
-		if (appContext.networks!=null)
+		Log.v(TAG, "jniCallback "+state.toString());
+
+		if (appContext.networks!=null && appContext.teamStorage!=null && appContext.teamStorage == this)
 			appContext.networks.setAlarm(10);
 	}
 

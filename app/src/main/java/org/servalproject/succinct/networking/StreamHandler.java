@@ -1,6 +1,7 @@
 package org.servalproject.succinct.networking;
 
 import android.os.SystemClock;
+import android.util.Log;
 
 import org.servalproject.succinct.networking.messages.Message;
 
@@ -11,10 +12,12 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 
 public abstract class StreamHandler extends NioHandler<SocketChannel> {
-	private ByteBuffer readBuffer;
-	private ByteBuffer writeBuffer;
+	private final ByteBuffer readBuffer;
+	private final ByteBuffer writeBuffer;
 	protected long lastRead =-1;
 	protected long lastWrite =-1;
+
+	private static final String TAG = "StreamHandler";
 
 	protected StreamHandler(SocketChannel channel) {
 		super(channel);
@@ -44,6 +47,7 @@ public abstract class StreamHandler extends NioHandler<SocketChannel> {
 	public void read() throws IOException {
 		int read = channel.read(readBuffer);
 		if (read == -1) {
+			Log.v(TAG, "Closing due to read()==-1");
 			close();
 			return;
 		}
@@ -61,6 +65,7 @@ public abstract class StreamHandler extends NioHandler<SocketChannel> {
 		synchronized (writeBuffer) {
 			int wrote = channel.write(writeBuffer);
 			if (wrote == -1) {
+				Log.v(TAG, "closing due to write()==-1");
 				close();
 				return;
 			}

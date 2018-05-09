@@ -8,8 +8,7 @@
 #include "storage.h"
 #include "sync_keys.h"
 #include "native-lib.h"
-
-#define LOGIF(X, ...) __android_log_print(ANDROID_LOG_INFO, "StorageJNI", X, ##__VA_ARGS__)
+#include "forms/log.h"
 
 // current snapshot
 #define MAX_NAME (256)
@@ -61,7 +60,7 @@ static jmethodID jni_sync_message;
 static jmethodID jni_peer_has;
 
 static void close_db(struct dbstate *state){
-    LOGIF("close_db");
+    LOGI("close_db");
     if (state->sync_state)
         sync_free_state(state->sync_state);
     if (state->files)
@@ -75,30 +74,30 @@ static void close_db(struct dbstate *state){
 static int open_db(struct dbstate *state, const char *path){
     MDB_txn *txn;
 
-    LOGIF("open_db %s", path);
+    LOGI("open_db %s", path);
 
     if (mdb_env_create(&state->env)){
-        LOGIF("mdb_env_create failed");
+        LOGI("mdb_env_create failed");
         return -1;
     }
     mdb_env_set_maxdbs(state->env, 2);
     if (mdb_env_open(state->env, path, 0, 0)) {
-        LOGIF("mdb_env_create failed");
+        LOGI("mdb_env_create failed");
         goto error;
     }
     if (mdb_txn_begin(state->env, NULL, 0, &txn)){
-        LOGIF("mdb_txn_begin failed");
+        LOGI("mdb_txn_begin failed");
         goto error;
     }
 
     if (mdb_dbi_open(txn, "files", MDB_CREATE, &state->files)){
-        LOGIF("mdb_dbi_open files failed");
+        LOGI("mdb_dbi_open files failed");
         mdb_txn_abort(txn);
         goto error;
     }
 
     if (mdb_dbi_open(txn, "index", MDB_CREATE, &state->index)){
-        LOGIF("mdb_dbi_open index failed");
+        LOGI("mdb_dbi_open index failed");
         mdb_txn_abort(txn);
         goto error;
     }
@@ -115,7 +114,7 @@ static int open_db(struct dbstate *state, const char *path){
             memcpy(&state->root, val.mv_data, sizeof state->root);
 
         if (state->root.version != VERSION){
-            LOGIF("%d != %d, CLEARING DATABASE", state->root.version, VERSION);
+            LOGI("%d != %d, CLEARING DATABASE", state->root.version, VERSION);
             mdb_drop(txn, state->index, 0);
             mdb_drop(txn, state->files, 0);
             memset(&state->root, 0, sizeof state->root);
@@ -124,7 +123,7 @@ static int open_db(struct dbstate *state, const char *path){
     state->root.version = VERSION;
 
     if (mdb_txn_commit(txn) != 0){
-        LOGIF("mdb_txn_commit failed");
+        LOGI("mdb_txn_commit failed");
         goto error;
     }
 
@@ -200,28 +199,38 @@ static void send_metadata(JNIEnv* env, struct dbstate *state, jobject peer, cons
 
     int r = mdb_get(txn, state->index, &key, &val);
     if (r == MDB_NOTFOUND){
-        LOGIF("Metadata not found??? (%x %x %x ...)", sync_key->key[0], sync_key->key[1], sync_key->key[2]);
+        LOGE("Metadata not found??? (%x %x %x ...)", sync_key->key[0], sync_key->key[1], sync_key->key[2]);
     } else if (r==0){
-        const struct file_version *peer_version = (const file_version *) val.mv_data;
-        jbyteArray argument = env->NewByteArray(sizeof(sync_key_t)+sizeof(struct file_version)+1);
+        struct file_version *peer_version = (file_version *) val.mv_data;
+        size_t len = offsetof(struct file_version, name)+strlen(peer_version->name)+1;
+
+        jbyteArray argument = env->NewByteArray(sizeof(sync_key_t)+len+1);
         uint8_t type = SYNC_MSG_SEND_METADATA;
         env->SetByteArrayRegion(argument, 0, 1, (const jbyte *) &type);
         env->SetByteArrayRegion(argument, 1, sizeof(sync_key_t), (const jbyte *) sync_key);
-        env->SetByteArrayRegion(argument, 1+sizeof(sync_key_t), sizeof(struct file_version), (const jbyte *) peer_version);
+        env->SetByteArrayRegion(argument, 1+sizeof(sync_key_t), (jsize) len, (const jbyte *) peer_version);
         env->CallVoidMethod(peer, jni_sync_message, argument);
         env->DeleteLocalRef(argument);
     }else{
-        LOGIF("Other error? %d", r);
+        LOGE("Other error? %d", r);
     }
     mdb_txn_abort(txn);
 }
 
-static void receive_metadata(JNIEnv* env, struct dbstate *state, jobject peer, const uint8_t *msg, size_t len){
-    if (len != sizeof(sync_key_t) + sizeof(struct file_version))
+static void receive_metadata(JNIEnv* env, struct dbstate *state, jobject peer, const uint8_t *msg, size_t len) {
+    if (len < sizeof(sync_key_t) + offsetof(struct file_version, name) + 2) {
+        LOGE("Metadata is too short");
         return;
+    }
+    if (msg[len -1]!=0){
+        LOGE("Name is not null terminated?");
+    }
+
 
     const sync_key_t *sync_key = (const sync_key_t *) msg;
     const struct file_version *peer_version = (const file_version *) (msg + sizeof(sync_key_t));
+
+    len -= sizeof(sync_key_t);
 
     MDB_txn *txn;
     if (mdb_txn_begin(state->env, NULL, 0, &txn)!=0)
@@ -233,7 +242,7 @@ static void receive_metadata(JNIEnv* env, struct dbstate *state, jobject peer, c
     key.mv_data = (void *)sync_key;
     key.mv_size = sizeof(sync_key_t);
     val.mv_data = (void *) peer_version;
-    val.mv_size = sizeof(struct file_version);
+    val.mv_size = len;
 
     if (mdb_put(txn, state->index, &key, &val, 0)!=0)
         goto error;
@@ -321,7 +330,7 @@ static struct file_data *file_open(struct dbstate *state, const char *name){
 
     // sanity check...
     if (r != MDB_NOTFOUND && val.mv_size != PERSIST_LEN){
-        LOGIF("WRONG LENGTH! (%d vs %d)", (int)val.mv_size, (int)PERSIST_LEN);
+        LOGI("WRONG LENGTH! (%d vs %d)", (int)val.mv_size, (int)PERSIST_LEN);
         r = MDB_NOTFOUND;
     }
 
@@ -358,7 +367,7 @@ static int file_flush(struct dbstate *state, struct file_data *file, const uint8
     crypto_hash_sha256_final(&new_data.new_hash, new_data.hash);
 
     if (hash_len && memcmp(expected_hash, new_data.hash, hash_len) != 0) {
-        LOGIF("Hash comparison failed");
+        LOGI("Hash comparison failed");
         goto rewind;
     }
 
@@ -367,7 +376,7 @@ static int file_flush(struct dbstate *state, struct file_data *file, const uint8
     new_data.length = new_data.new_length;
 
     if (mdb_txn_begin(state->env, NULL, 0, &txn) != 0) {
-        LOGIF("mdb_txn_begin failed");
+        LOGI("mdb_txn_begin failed");
         goto rewind;
     }
 
@@ -377,7 +386,7 @@ static int file_flush(struct dbstate *state, struct file_data *file, const uint8
     val.mv_size = PERSIST_LEN;
 
     if (mdb_put(txn, state->files, &key, &val, 0) != 0) {
-        LOGIF("mdb_put failed");
+        LOGI("mdb_put failed");
         goto error;
     }
 
@@ -390,10 +399,10 @@ static int file_flush(struct dbstate *state, struct file_data *file, const uint8
     key.mv_data = (void *) new_data.hash;
     key.mv_size = sizeof(sync_key_t);
     val.mv_data = &new_version;
-    val.mv_size = sizeof new_version;
+    val.mv_size = offsetof(struct file_version, name)+strlen(new_version.name)+1;
 
     if (mdb_put(txn, state->index, &key, &val, 0) != 0) {
-        LOGIF("mdb_put failed");
+        LOGI("mdb_put failed");
         goto error;
     }
 
@@ -408,12 +417,12 @@ static int file_flush(struct dbstate *state, struct file_data *file, const uint8
     val.mv_size = sizeof new_root;
 
     if (mdb_put(txn, state->index, &key, &val, 0) != 0) {
-        LOGIF("mdb_put failed");
+        LOGI("mdb_put failed");
         goto error;
     }
 
     if (mdb_txn_commit(txn) != 0) {
-        LOGIF("mdb_txn_commit failed");
+        LOGI("mdb_txn_commit failed");
         goto error;
     }
 
@@ -431,7 +440,7 @@ static int file_flush(struct dbstate *state, struct file_data *file, const uint8
 
     *file = new_data;
 
-    LOGIF("flushed file %s, len %d", file->name, (int)file->length);
+    LOGI("flushed file %s, len %d", file->name, (int)file->length);
     return 1;
 
 error:
@@ -558,7 +567,7 @@ static jlong JNICALL jni_peer_message(JNIEnv *env, jobject object, jlong store_p
                 break;
             default:
                 // unknown message type...
-                LOGIF("Unhandled type %d?", msg[0]);
+                LOGI("Unhandled type %d?", msg[0]);
                 break;
         }
 

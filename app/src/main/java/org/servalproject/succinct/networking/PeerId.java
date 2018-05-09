@@ -56,6 +56,14 @@ public class PeerId {
 		serialiser.putFixedBytes(id);
 	}
 
+	public int compare(PeerId other){
+		for(int i=0;i<id.length;i++){
+			if (id[i] != other.id[i])
+				return id[i] - other.id[i];
+		}
+		return 0;
+	}
+
 	@Override
 	public boolean equals(Object o) {
 		if (this == o) return true;

@@ -1,5 +1,8 @@
 package org.servalproject.succinct.networking.messages;
 
+import android.util.Log;
+
+import org.servalproject.succinct.networking.Hex;
 import org.servalproject.succinct.networking.Peer;
 import org.servalproject.succinct.storage.DeSerialiser;
 import org.servalproject.succinct.storage.Factory;

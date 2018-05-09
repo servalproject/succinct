@@ -1,6 +1,8 @@
 
 package org.servalproject.succinct.networking;
 
+import android.util.Log;
+
 import org.servalproject.succinct.networking.messages.Header;
 import org.servalproject.succinct.networking.messages.Message;
 
@@ -18,6 +20,8 @@ public class PeerConnection extends StreamHandler {
 	private Peer peer;
 	final boolean initiated;
 	boolean shutdown = false;
+	private static final String TAG = "Connection";
+
 	private final Queue<Message> queue = new PriorityQueue<>(10, new Comparator<Message>() {
 		@Override
 		public int compare(Message one, Message two) {
@@ -38,6 +42,8 @@ public class PeerConnection extends StreamHandler {
 		this.initiated = initiated;
 		this.networks = networks;
 		this.peer = peer;
+		if (peer!=null)
+			peer.setConnection(this);
 		queue.add(new Header(networks.myId, true));
 		tryFill();
 	}
@@ -54,9 +60,11 @@ public class PeerConnection extends StreamHandler {
 			}
 
 			if (msg instanceof Header){
-				Header hdr = (Header)msg;
-				peer = networks.createPeer(hdr.id);
-				peer.setConnection(this);
+				if (peer == null) {
+					Header hdr = (Header) msg;
+					peer = networks.createPeer(hdr.id);
+					peer.setConnection(this);
+				}
 				continue;
 			}
 
@@ -85,8 +93,10 @@ public class PeerConnection extends StreamHandler {
 	@Override
 	public void write() throws IOException {
 		super.write();
-		if (shutdown && (getInterest() & SelectionKey.OP_WRITE)==0)
+		if (shutdown && queue.isEmpty() && (getInterest() & SelectionKey.OP_WRITE)==0) {
+			Log.v(TAG, "Graceful close (write)");
 			close();
+		}
 	}
 
 	public void queue(Message message) {
@@ -97,15 +107,24 @@ public class PeerConnection extends StreamHandler {
 	}
 
 	public void shutdown(){
+		if (shutdown)
+			return;
+		Log.v(TAG, "Shutdown");
 		shutdown = true;
-		if (queue.isEmpty())
+		if (peer!=null && peer.connection == this)
+			peer.setConnection(null);
+		if (queue.isEmpty()) {
+			Log.v(TAG, "Graceful close");
 			close();
+		}
 	}
 
 	@Override
 	public void close() {
 		super.close();
+		if (!shutdown)
+			Log.v(TAG, "Forceful close?");
 		if (peer!=null && peer.connection == this)
-			peer.connection = null;
+			peer.setConnection(null);
 	}
 }

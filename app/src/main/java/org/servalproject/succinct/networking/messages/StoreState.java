@@ -48,8 +48,6 @@ public class StoreState extends Message<StoreState>{
 
 	@Override
 	public void process(Peer peer) {
-		// TODO collect the set of known peer teams for UI browsing
-
 		peer.setStoreState(this);
 	}
 
@@ -74,5 +72,10 @@ public class StoreState extends Message<StoreState>{
 		int result = teamId.hashCode();
 		result = 31 * result + Arrays.hashCode(key);
 		return result;
+	}
+
+	@Override
+	public String toString() {
+		return "StoreState; "+teamId.toString()+","+Hex.toString(key);
 	}
 }
