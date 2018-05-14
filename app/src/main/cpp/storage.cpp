@@ -186,6 +186,31 @@ static int process_difference(struct dbstate *state, jobject peer, const sync_ke
     return 0;
 }
 
+static int pack_uint(uint8_t *buffer, uint64_t v){
+    int ret=0;
+    do{
+        *buffer++=(v&0x7f) | (v>0x7f?0x80:0);
+        v>>=7;
+        ret++;
+    }while(v);
+    return ret;
+}
+
+static int unpack_uint(const uint8_t *buffer, int buff_size, uint64_t *v){
+    int i=0;
+    *v=0;
+    while(1){
+        if (i>=buff_size)
+            return -1;
+        char byte = buffer[i];
+        *v |= (byte&0x7f)<<(i*7);
+        i++;
+        if (!(byte&0x80))
+            break;
+    }
+    return i;
+}
+
 static void send_metadata(JNIEnv* env, struct dbstate *state, jobject peer, const sync_key_t *sync_key){
     MDB_txn *txn;
     if (mdb_txn_begin(state->env, NULL, MDB_RDONLY, &txn)!=0)
@@ -202,13 +227,22 @@ static void send_metadata(JNIEnv* env, struct dbstate *state, jobject peer, cons
         LOGE("Metadata not found??? (%x %x %x ...)", sync_key->key[0], sync_key->key[1], sync_key->key[2]);
     } else if (r==0){
         struct file_version *peer_version = (file_version *) val.mv_data;
-        size_t len = offsetof(struct file_version, name)+strlen(peer_version->name)+1;
+        size_t len = 1 + sizeof(sync_key_t) + 16 + strlen(peer_version->name)+1;
+        uint8_t buff[len];
 
-        jbyteArray argument = env->NewByteArray(sizeof(sync_key_t)+len+1);
-        uint8_t type = SYNC_MSG_SEND_METADATA;
-        env->SetByteArrayRegion(argument, 0, 1, (const jbyte *) &type);
-        env->SetByteArrayRegion(argument, 1, sizeof(sync_key_t), (const jbyte *) sync_key);
-        env->SetByteArrayRegion(argument, 1+sizeof(sync_key_t), (jsize) len, (const jbyte *) peer_version);
+        unsigned offset=0;
+        buff[offset++]=SYNC_MSG_SEND_METADATA;
+        memcpy(&buff[offset], sync_key, sizeof(sync_key_t));
+        offset+=sizeof(sync_key_t);
+        offset+=pack_uint(&buff[offset], peer_version->version);
+        offset+=pack_uint(&buff[offset], peer_version->length);
+        strcpy((char*)&buff[offset],peer_version->name);
+        offset+=strlen(peer_version->name)+1;
+
+        LOGI("Sending metadata [%u, %u, %s]", (unsigned)peer_version->version, (unsigned)peer_version->length, peer_version->name);
+        
+        jbyteArray argument = env->NewByteArray(offset);
+        env->SetByteArrayRegion(argument, 0, offset, (const jbyte*)buff);
         env->CallVoidMethod(peer, jni_sync_message, argument);
         env->DeleteLocalRef(argument);
     }else{
@@ -226,11 +260,22 @@ static void receive_metadata(JNIEnv* env, struct dbstate *state, jobject peer, c
         LOGE("Name is not null terminated?");
     }
 
-
+    unsigned offset=0;
     const sync_key_t *sync_key = (const sync_key_t *) msg;
-    const struct file_version *peer_version = (const file_version *) (msg + sizeof(sync_key_t));
+    offset+=sizeof(sync_key_t);
 
-    len -= sizeof(sync_key_t);
+    struct file_version peer_version;
+    bzero(&peer_version, sizeof(peer_version));
+
+    uint64_t tmp;
+    offset+=unpack_uint(&msg[offset], len - offset, &tmp);
+    peer_version.version= (uint32_t)tmp;
+
+    offset+=unpack_uint(&msg[offset], len - offset, &tmp);
+    peer_version.length=tmp;
+
+    strncpy(peer_version.name, (const char*)&msg[offset], len - offset);
+    LOGI("Received metadata [%u, %u, %s]", (unsigned)peer_version.version, (unsigned)peer_version.length, peer_version.name);
 
     MDB_txn *txn;
     if (mdb_txn_begin(state->env, NULL, 0, &txn)!=0)
@@ -241,15 +286,15 @@ static void receive_metadata(JNIEnv* env, struct dbstate *state, jobject peer, c
 
     key.mv_data = (void *)sync_key;
     key.mv_size = sizeof(sync_key_t);
-    val.mv_data = (void *) peer_version;
-    val.mv_size = len;
+    val.mv_data = (void *) &peer_version;
+    val.mv_size = sizeof(struct file_version);
 
     if (mdb_put(txn, state->index, &key, &val, 0)!=0)
         goto error;
     if (mdb_txn_commit(txn)!=0)
         goto error;
 
-    call_peer_has(env, peer, sync_key, peer_version);
+    call_peer_has(env, peer, sync_key, &peer_version);
     return;
 
 error:
